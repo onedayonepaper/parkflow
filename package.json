@@ -1,0 +1,24 @@
+{
+  "name": "parkflow",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:api": "pnpm --filter @parkflow/api-server dev",
+    "dev:admin": "pnpm --filter @parkflow/admin-web dev",
+    "dev:agent": "pnpm --filter @parkflow/device-agent dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "db:migrate": "pnpm --filter @parkflow/api-server db:migrate",
+    "db:seed": "pnpm --filter @parkflow/api-server db:seed"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}
