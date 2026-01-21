@@ -256,7 +256,124 @@ function runMigrations(database: Database.Database): void {
       FOREIGN KEY(device_id) REFERENCES devices(id),
       FOREIGN KEY(lane_id) REFERENCES lanes(id)
     );
+
+    -- 14) Blacklist - 차량 블랙리스트
+    CREATE TABLE IF NOT EXISTS blacklist (
+      id TEXT PRIMARY KEY,
+      site_id TEXT NOT NULL,
+      plate_no TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      blocked_until TEXT,
+      created_by TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY(site_id) REFERENCES sites(id),
+      FOREIGN KEY(created_by) REFERENCES users(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_blacklist_plate ON blacklist(plate_no);
+    CREATE INDEX IF NOT EXISTS idx_blacklist_site ON blacklist(site_id, is_active);
+
+    -- 15) Notifications - 알림 설정 및 로그
+    CREATE TABLE IF NOT EXISTS notification_templates (
+      id TEXT PRIMARY KEY,
+      site_id TEXT NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('EMAIL','SMS','PUSH')),
+      event_type TEXT NOT NULL,
+      subject TEXT,
+      body_template TEXT NOT NULL,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY(site_id) REFERENCES sites(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS notification_logs (
+      id TEXT PRIMARY KEY,
+      site_id TEXT NOT NULL,
+      template_id TEXT,
+      recipient TEXT NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('EMAIL','SMS','PUSH')),
+      subject TEXT,
+      body TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('PENDING','SENT','FAILED')),
+      error_message TEXT,
+      sent_at TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(site_id) REFERENCES sites(id),
+      FOREIGN KEY(template_id) REFERENCES notification_templates(id)
+    );
+
+    -- 16) Payment Settings - PG 설정
+    CREATE TABLE IF NOT EXISTS payment_settings (
+      id TEXT PRIMARY KEY,
+      site_id TEXT NOT NULL UNIQUE,
+      pg_provider TEXT NOT NULL DEFAULT 'MOCK' CHECK(pg_provider IN ('MOCK','TOSSPAYMENTS','NICE','KCP')),
+      client_key TEXT,
+      secret_key_encrypted TEXT,
+      webhook_secret TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      test_mode INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY(site_id) REFERENCES sites(id)
+    );
+
+    -- 17) User Settings - 사용자별 설정
+    CREATE TABLE IF NOT EXISTS user_settings (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL UNIQUE,
+      notification_entry INTEGER NOT NULL DEFAULT 1,
+      notification_exit INTEGER NOT NULL DEFAULT 1,
+      notification_payment INTEGER NOT NULL DEFAULT 1,
+      notification_error INTEGER NOT NULL DEFAULT 1,
+      notification_membership INTEGER NOT NULL DEFAULT 1,
+      sound_enabled INTEGER NOT NULL DEFAULT 1,
+      desktop_enabled INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY(user_id) REFERENCES users(id)
+    );
+
+    -- 18) System Settings - 시스템 설정
+    CREATE TABLE IF NOT EXISTS system_settings (
+      id TEXT PRIMARY KEY,
+      site_id TEXT NOT NULL,
+      key TEXT NOT NULL,
+      value TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(site_id, key),
+      FOREIGN KEY(site_id) REFERENCES sites(id)
+    );
+
   `;
+
+  // Add columns if not exists (SQLite workaround)
+  try {
+    database.exec(`ALTER TABLE parking_sessions ADD COLUMN paid_at TEXT`);
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
+  try {
+    database.exec(`ALTER TABLE payments ADD COLUMN site_id TEXT REFERENCES sites(id)`);
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
+  try {
+    database.exec(`ALTER TABLE payments ADD COLUMN pg_response_json TEXT`);
+  } catch (e) {
+    // Column already exists, ignore
+  }
+
+  try {
+    database.exec(`ALTER TABLE payments ADD COLUMN pg_provider TEXT DEFAULT 'MOCK'`);
+  } catch (e) {
+    // Column already exists, ignore
+  }
 
   database.exec(schema);
 }

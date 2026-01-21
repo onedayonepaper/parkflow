@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { ToastProvider } from './components/Toast';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { RealtimeHandler } from './components/RealtimeHandler';
 import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
@@ -16,6 +17,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     >
       <ThemeProvider>
         <ToastProvider>
+          <RealtimeHandler />
           <App />
         </ToastProvider>
       </ThemeProvider>

@@ -28,6 +28,9 @@ export interface JwtPayload {
   siteId: string;
 }
 
+// Device Agent API 키 (환경변수 또는 기본값)
+const DEVICE_API_KEY = process.env.DEVICE_API_KEY || 'parkflow-device-key-2024';
+
 /**
  * WebSocket 인증 핸들러 생성
  * @param app Fastify 인스턴스 (JWT 검증용)
@@ -40,7 +43,62 @@ export function createWsHandler(app: FastifyInstance) {
     // 쿼리 파라미터에서 토큰 추출
     const url = new URL(request.url, `http://${request.headers.host}`);
     const token = url.searchParams.get('token');
+    const apiKey = url.searchParams.get('apiKey');
+    const deviceId = url.searchParams.get('deviceId');
 
+    // Device Agent 인증 (API 키 방식)
+    if (apiKey && deviceId) {
+      if (apiKey !== DEVICE_API_KEY) {
+        app.log.warn('[WS] Device connection rejected: Invalid API key');
+        socket.close(4003, 'Invalid API key');
+        return;
+      }
+
+      // 디바이스 클라이언트 등록
+      const client: AuthenticatedClient = {
+        socket,
+        userId: deviceId,
+        username: `device:${deviceId}`,
+        role: 'DEVICE',
+        siteId: 'site_default',
+      };
+      clients.set(socket, client);
+
+      app.log.info({ deviceId, total: clients.size }, '[WS] Device connected');
+
+      socket.send(JSON.stringify({
+        type: 'CONNECTED',
+        data: {
+          message: 'ParkFlow Device WebSocket connected',
+          timestamp: new Date().toISOString(),
+          device: { id: deviceId },
+        },
+      }));
+
+      // 메시지 수신
+      socket.on('message', (raw: RawData) => {
+        try {
+          const message = JSON.parse(raw.toString());
+          app.log.debug({ deviceId, message }, '[WS] Device message received');
+        } catch (err) {
+          app.log.error({ err }, '[WS] Failed to parse device message');
+        }
+      });
+
+      socket.on('close', () => {
+        clients.delete(socket);
+        app.log.info({ deviceId, total: clients.size }, '[WS] Device disconnected');
+      });
+
+      socket.on('error', (err: Error) => {
+        app.log.error({ err, deviceId }, '[WS] Device socket error');
+        clients.delete(socket);
+      });
+
+      return;
+    }
+
+    // 사용자 인증 (JWT 방식)
     if (!token) {
       app.log.warn('[WS] Connection rejected: No token provided');
       socket.close(4001, 'Authentication required');

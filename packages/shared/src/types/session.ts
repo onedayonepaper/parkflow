@@ -26,6 +26,9 @@ export type CloseReason =
   | 'SYSTEM_CLOSE'
   | 'ERROR_RECOVERY';
 
+/** 적용된 요금 유형 */
+export type AppliedRateType = 'default' | 'night' | 'weekend' | 'weekendNight';
+
 /** 요금 계산 내역 */
 export interface FeeBreakdown {
   parkingMinutes: number;
@@ -50,6 +53,8 @@ export interface FeeBreakdown {
   calculatedAt: string;
   ratePlanId: string;
   ratePlanName: string;
+  /** 적용된 요금 유형 (평일주간/야간/주말/주말야간) */
+  appliedRateType?: AppliedRateType;
 }
 
 /** 주차 세션 */

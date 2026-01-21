@@ -67,7 +67,7 @@ export async function ratePlanRoutes(app: FastifyInstance) {
                       siteId: { type: 'string' },
                       name: { type: 'string' },
                       isActive: { type: 'boolean' },
-                      rules: { type: 'object' },
+                      rules: { type: 'object', additionalProperties: true },
                       createdAt: { type: 'string', format: 'date-time' },
                       updatedAt: { type: 'string', format: 'date-time' },
                     },

@@ -24,8 +24,11 @@ export async function sessionRoutes(app: FastifyInstance) {
       status?: string;
       plateNo?: string;
       laneId?: string;
+      paymentStatus?: string;
       from?: string;
       to?: string;
+      fromDate?: string;
+      toDate?: string;
       page?: string;
       limit?: string;
     };
@@ -42,8 +45,11 @@ export async function sessionRoutes(app: FastifyInstance) {
           status: { type: 'string', enum: ['PARKING', 'EXIT_PENDING', 'PAID', 'CLOSED', 'ERROR'] },
           plateNo: { type: 'string', description: '차량번호 (부분 검색)' },
           laneId: { type: 'string' },
+          paymentStatus: { type: 'string', enum: ['NONE', 'PENDING', 'PAID', 'FAILED', 'CANCELLED'] },
           from: { type: 'string', format: 'date-time' },
           to: { type: 'string', format: 'date-time' },
+          fromDate: { type: 'string', format: 'date', description: '시작일 (YYYY-MM-DD)' },
+          toDate: { type: 'string', format: 'date', description: '종료일 (YYYY-MM-DD)' },
           page: { type: 'string', default: '1' },
           limit: { type: 'string', default: '20' },
         },
@@ -60,6 +66,7 @@ export async function sessionRoutes(app: FastifyInstance) {
     }
 
     const { status, plateNo, laneId, from, to, page, limit } = parsed.data;
+    const { paymentStatus, fromDate, toDate } = request.query;
     const db = getDb();
 
     let sql = `
@@ -82,13 +89,20 @@ export async function sessionRoutes(app: FastifyInstance) {
       sql += ` AND (ps.entry_lane_id = ? OR ps.exit_lane_id = ?)`;
       params.push(laneId, laneId);
     }
-    if (from) {
-      sql += ` AND ps.entry_at >= ?`;
-      params.push(from);
+    if (paymentStatus) {
+      sql += ` AND ps.payment_status = ?`;
+      params.push(paymentStatus);
     }
-    if (to) {
+    // Support both from/to (datetime) and fromDate/toDate (date) formats
+    const startDate = from || (fromDate ? `${fromDate}T00:00:00.000Z` : null);
+    const endDate = to || (toDate ? `${toDate}T23:59:59.999Z` : null);
+    if (startDate) {
+      sql += ` AND ps.entry_at >= ?`;
+      params.push(startDate);
+    }
+    if (endDate) {
       sql += ` AND ps.entry_at <= ?`;
-      params.push(to);
+      params.push(endDate);
     }
 
     // Count

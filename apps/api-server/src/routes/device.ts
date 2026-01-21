@@ -15,6 +15,7 @@ import {
 } from '@parkflow/shared';
 import { calculateWithDiscounts } from '@parkflow/pricing-engine';
 import { broadcast } from '../ws/handler.js';
+import { getHardwareManager } from '../services/hardware.js';
 
 export async function deviceRoutes(app: FastifyInstance) {
   // POST /api/device/lpr/events - LPR 이벤트 수신
@@ -28,7 +29,13 @@ export async function deviceRoutes(app: FastifyInstance) {
       confidence?: number;
       imageUrl?: string;
     };
-    Reply: ApiResponse<{ eventId: string; sessionId: string | null }>;
+    Reply: ApiResponse<{
+      eventId: string;
+      sessionId: string | null;
+      blocked?: boolean;
+      reason?: string;
+      message?: string;
+    }>;
   }>('/lpr/events', {
     schema: {
       tags: ['Device'],
@@ -86,7 +93,58 @@ export async function deviceRoutes(app: FastifyInstance) {
 
     if (direction === 'ENTRY') {
       // 입차 처리
-      // 활성 세션 확인 (PARKING 상태)
+
+      // 1. 블랙리스트 확인
+      const blacklisted = db.prepare(`
+        SELECT id, reason FROM blacklist
+        WHERE plate_no = ? AND (expires_at IS NULL OR expires_at > ?)
+      `).get(plateNoNorm, now) as any;
+
+      if (blacklisted) {
+        // 블랙리스트 차량: 경고 브로드캐스트 및 입차 거부
+        broadcast({
+          type: 'BLACKLIST_ALERT',
+          data: {
+            plateNo: plateNoNorm,
+            reason: blacklisted.reason,
+            laneId,
+            capturedAt,
+          },
+        });
+
+        // 이벤트만 기록하고 세션 생성 안함
+        db.prepare(`
+          INSERT INTO plate_events (
+            id, site_id, device_id, lane_id, direction,
+            plate_no_raw, plate_no_norm, confidence, image_url,
+            captured_at, received_at, session_id, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          eventId, DEFAULT_SITE_ID, deviceId, laneId, direction,
+          plateNo, plateNoNorm, confidence ?? null, imageUrl ?? null,
+          capturedAt, now, null, now
+        );
+
+        return reply.send({
+          ok: true,
+          data: {
+            eventId,
+            sessionId: null,
+            blocked: true,
+            reason: 'BLACKLISTED',
+            message: blacklisted.reason,
+          },
+          error: null,
+        });
+      }
+
+      // 2. 정기권 확인
+      const membership = db.prepare(`
+        SELECT id, type, vehicle_type FROM memberships
+        WHERE plate_no = ? AND valid_from <= ? AND valid_to >= ?
+      `).get(plateNoNorm, capturedAt, capturedAt) as any;
+
+      // 3. 활성 세션 확인 (PARKING 상태)
       const existingSession = db.prepare(`
         SELECT id FROM parking_sessions
         WHERE plate_no = ? AND status = 'PARKING'
@@ -120,11 +178,23 @@ export async function deviceRoutes(app: FastifyInstance) {
           now
         );
 
-        // 세션 업데이트 브로드캐스트
+        // 세션 업데이트 브로드캐스트 (정기권 정보 포함)
         broadcast({
           type: 'SESSION_UPDATED',
-          data: { sessionId, status: 'PARKING', plateNo: plateNoNorm, entryAt: capturedAt },
+          data: {
+            sessionId,
+            status: 'PARKING',
+            plateNo: plateNoNorm,
+            entryAt: capturedAt,
+            isMember: !!membership,
+            membershipType: membership?.type || null,
+          },
         });
+
+        // 정기권 차량이면 입차 시 바로 차단기 열기
+        if (membership) {
+          await issueBarrierOpen(db, laneId, 'MEMBERSHIP_ENTRY', sessionId);
+        }
       }
       // 중복 입차인 경우 sessionId는 null로 유지 (이벤트만 기록)
     } else {
@@ -323,7 +393,7 @@ export async function deviceRoutes(app: FastifyInstance) {
       reason: string;
       correlationId?: string;
     };
-    Reply: ApiResponse<{ commandId: string }>;
+    Reply: ApiResponse<{ commandId: string; executed: boolean }>;
   }>('/barrier/command', {
     schema: {
       tags: ['Device'],
@@ -346,20 +416,103 @@ export async function deviceRoutes(app: FastifyInstance) {
     const commandId = generateId(ID_PREFIX.BARRIER_CMD);
     const now = nowIso();
 
+    // DB에 명령 저장
     db.prepare(`
       INSERT INTO barrier_commands (
         id, device_id, lane_id, action, reason, correlation_id, status, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?)
     `).run(commandId, deviceId, laneId, action, reason, correlationId ?? null, now);
 
+    // 하드웨어 매니저를 통해 실제 차단기 제어
+    const hardwareManager = getHardwareManager();
+    let result;
+
+    if (action === 'OPEN') {
+      result = await hardwareManager.openBarrier(deviceId, correlationId);
+    } else {
+      result = await hardwareManager.closeBarrier(deviceId, correlationId);
+    }
+
+    // WebSocket으로 브로드캐스트
     broadcast({
       type: 'BARRIER_COMMAND',
-      data: { commandId, deviceId, laneId, action, reason },
+      data: { commandId, deviceId, laneId, action, reason, executed: result.success },
     });
 
     return reply.send({
       ok: true,
-      data: { commandId },
+      data: { commandId, executed: result.success },
+      error: null,
+    });
+  });
+
+  // GET /api/device/barrier/:deviceId/state - 차단기 상태 조회
+  app.get<{
+    Params: { deviceId: string };
+  }>('/barrier/:deviceId/state', {
+    schema: {
+      tags: ['Device'],
+      summary: '차단기 상태 조회',
+      description: '특정 차단기의 현재 상태를 조회합니다.',
+    },
+  }, async (request, reply) => {
+    const { deviceId } = request.params;
+    const hardwareManager = getHardwareManager();
+
+    const state = await hardwareManager.getBarrierState(deviceId);
+
+    if (!state) {
+      return reply.code(404).send({
+        ok: false,
+        data: null,
+        error: { code: 'DEVICE_NOT_FOUND', message: '차단기를 찾을 수 없습니다' },
+      });
+    }
+
+    return reply.send({
+      ok: true,
+      data: { deviceId, state },
+      error: null,
+    });
+  });
+
+  // GET /api/device/status - 모든 디바이스 상태 조회
+  app.get('/status', {
+    schema: {
+      tags: ['Device'],
+      summary: '디바이스 상태 조회',
+      description: '모든 하드웨어 디바이스의 연결 상태를 조회합니다.',
+    },
+  }, async (request, reply) => {
+    const hardwareManager = getHardwareManager();
+    const statuses = hardwareManager.getDeviceStatuses();
+
+    // DB에서 디바이스 정보 조회
+    const db = getDb();
+    const devices = db.prepare(`
+      SELECT d.*, l.name as lane_name, l.direction
+      FROM devices d
+      LEFT JOIN lanes l ON d.lane_id = l.id
+    `).all() as any[];
+
+    const deviceInfo = devices.map(d => {
+      const hwStatus = statuses.find(s => s.deviceId === d.id);
+      return {
+        id: d.id,
+        name: d.name,
+        type: d.type,
+        status: d.status,
+        connected: hwStatus?.connected ?? false,
+        laneId: d.lane_id,
+        laneName: d.lane_name,
+        direction: d.direction,
+        lastSeenAt: d.last_seen_at,
+      };
+    });
+
+    return reply.send({
+      ok: true,
+      data: { devices: deviceInfo },
       error: null,
     });
   });
@@ -383,15 +536,32 @@ async function issueBarrierOpen(
     const commandId = generateId(ID_PREFIX.BARRIER_CMD);
     const now = nowIso();
 
+    // DB에 명령 저장
     db.prepare(`
       INSERT INTO barrier_commands (
         id, device_id, lane_id, action, reason, correlation_id, status, created_at
       ) VALUES (?, ?, ?, 'OPEN', ?, ?, 'PENDING', ?)
     `).run(commandId, barrier.id, laneId, reason, correlationId, now);
 
+    // 하드웨어 매니저를 통해 실제 차단기 제어
+    const hardwareManager = getHardwareManager();
+    const result = await hardwareManager.openBarrier(barrier.id, correlationId);
+
+    if (!result.success) {
+      console.error(`[issueBarrierOpen] 차단기 열림 실패: ${barrier.id}`, result.error);
+    }
+
+    // WebSocket으로 명령 브로드캐스트
     broadcast({
       type: 'BARRIER_COMMAND',
-      data: { commandId, deviceId: barrier.id, laneId, action: 'OPEN', reason },
+      data: {
+        commandId,
+        deviceId: barrier.id,
+        laneId,
+        action: 'OPEN',
+        reason,
+        executed: result.success,
+      },
     });
   }
 }

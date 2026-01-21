@@ -26,4 +26,7 @@ export const ID_PREFIX = {
   BARRIER_CMD: 'bcmd',
   USER: 'usr',
   AUDIT: 'aud',
+  BLACKLIST: 'bl',
+  NOTIFICATION: 'noti',
+  PAYMENT_SETTING: 'pset',
 } as const;

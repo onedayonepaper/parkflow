@@ -168,4 +168,214 @@ export const api = {
     request<{
       daily: { date: string; revenue: number; sessions: number }[];
     }>('/stats/weekly'),
+
+  getMonthlyStats: (params?: Record<string, string>) => {
+    const query = params ? '?' + new URLSearchParams(params).toString() : '';
+    return request<{
+      monthly: { month: string; revenue: number; sessions: number; avgDuration: number }[];
+    }>(`/stats/monthly${query}`);
+  },
+
+  getReportStats: (params?: Record<string, string>) => {
+    const query = params ? '?' + new URLSearchParams(params).toString() : '';
+    return request<{
+      period: { from: string; to: string };
+      summary: {
+        totalRevenue: number;
+        totalSessions: number;
+        avgDuration: number;
+        avgFee: number;
+        cancelledCount: number;
+        cancelledAmount: number;
+        membershipUsage: number;
+      };
+      paymentMethods: { method: string; count: number; total: number }[];
+      dailyRevenue: { date: string; revenue: number; payments: number }[];
+    }>(`/stats/report${query}`);
+  },
+
+  // Discount Rules - extended
+  updateDiscountRule: (id: string, data: any) =>
+    request<any>(`/discount-rules/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteDiscountRule: (id: string) =>
+    request<any>(`/discount-rules/${id}`, { method: 'DELETE' }),
+
+  // Audit Logs
+  getAuditLogs: (params?: Record<string, string>) => {
+    const query = params ? '?' + new URLSearchParams(params).toString() : '';
+    return request<{
+      items: any[];
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+    }>(`/audit${query}`);
+  },
+
+  getAuditActions: () =>
+    request<{ actions: string[] }>('/audit/actions'),
+
+  getAuditEntityTypes: () =>
+    request<{ entityTypes: string[] }>('/audit/entity-types'),
+
+  // Users
+  getUsers: () => request<{ items: any[] }>('/users'),
+
+  createUser: (data: { username: string; password: string; role: string }) =>
+    request<any>('/users', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateUser: (id: string, data: any) =>
+    request<any>(`/users/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteUser: (id: string) =>
+    request<any>(`/users/${id}`, { method: 'DELETE' }),
+
+  // Blacklist
+  getBlacklist: (params?: Record<string, string>) => {
+    const query = params ? '?' + new URLSearchParams(params).toString() : '';
+    return request<{ items: any[]; total: number; page: number; limit: number; totalPages: number }>(
+      `/blacklist${query}`
+    );
+  },
+
+  createBlacklist: (data: { plateNo: string; reason: string; blockedUntil?: string }) =>
+    request<any>('/blacklist', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateBlacklist: (id: string, data: any) =>
+    request<any>(`/blacklist/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteBlacklist: (id: string) =>
+    request<any>(`/blacklist/${id}`, { method: 'DELETE' }),
+
+  checkBlacklist: (plateNo: string) =>
+    request<{ isBlacklisted: boolean; reason: string | null }>(`/blacklist/check/${plateNo}`),
+
+  // Sites
+  getSites: () => request<{ items: any[] }>('/sites'),
+
+  getSite: (id: string) => request<any>(`/sites/${id}`),
+
+  createSite: (data: { name: string; timezone?: string }) =>
+    request<any>('/sites', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateSite: (id: string, data: any) =>
+    request<any>(`/sites/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteSite: (id: string) =>
+    request<any>(`/sites/${id}`, { method: 'DELETE' }),
+
+  // Notifications
+  getNotificationTemplates: () => request<{ items: any[] }>('/notifications/templates'),
+
+  createNotificationTemplate: (data: any) =>
+    request<any>('/notifications/templates', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateNotificationTemplate: (id: string, data: any) =>
+    request<any>(`/notifications/templates/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteNotificationTemplate: (id: string) =>
+    request<any>(`/notifications/templates/${id}`, { method: 'DELETE' }),
+
+  sendNotification: (data: { type: string; recipient: string; subject?: string; body: string }) =>
+    request<any>('/notifications/send', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  getNotificationLogs: (params?: Record<string, string>) => {
+    const query = params ? '?' + new URLSearchParams(params).toString() : '';
+    return request<{ items: any[]; total: number; page: number; totalPages: number }>(
+      `/notifications/logs${query}`
+    );
+  },
+
+  testNotification: (data: { type: string; recipient: string }) =>
+    request<any>('/notifications/test', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // TossPayments
+  getTossClientKey: () => request<{ clientKey: string }>('/payments/toss/client-key'),
+
+  confirmTossPayment: (data: {
+    paymentKey: string;
+    orderId: string;
+    amount: number;
+    sessionId: string;
+  }) =>
+    request<any>('/payments/toss/confirm', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  cancelTossPayment: (paymentKey: string, data: { cancelReason: string; cancelAmount?: number }) =>
+    request<any>(`/payments/toss/${paymentKey}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Devices
+  getDevices: () => request<{ devices: any[] }>('/device/status'),
+
+  createDevice: (data: { name: string; type: string; laneId?: string | null }) =>
+    request<any>('/devices', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateDevice: (id: string, data: { name?: string; laneId?: string | null }) =>
+    request<any>(`/devices/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteDevice: (id: string) =>
+    request<any>(`/devices/${id}`, { method: 'DELETE' }),
+
+  // Lanes
+  getLanes: () => request<{ items: any[] }>('/lanes'),
+
+  createLane: (data: { name: string; direction: string }) =>
+    request<any>('/lanes', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateLane: (id: string, data: { name?: string; direction?: string }) =>
+    request<any>(`/lanes/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteLane: (id: string) =>
+    request<any>(`/lanes/${id}`, { method: 'DELETE' }),
 };

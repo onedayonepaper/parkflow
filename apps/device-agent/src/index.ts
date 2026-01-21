@@ -8,6 +8,9 @@ import { EventQueue } from './queue.js';
 const env = validateEnv(deviceAgentEnvSchema);
 const { API_BASE } = env;
 
+// Device API Key (환경변수 또는 기본값)
+const DEVICE_API_KEY = process.env.DEVICE_API_KEY || 'parkflow-device-key-2024';
+
 async function main() {
   console.log('🚗 ParkFlow Device Agent starting...');
   console.log(`   API: ${API_BASE}`);
@@ -37,12 +40,14 @@ async function main() {
     deviceId: 'dev_barrier_entry_1',
     laneId: 'lane_entry_1',
     wsUrl: API_BASE.replace('http', 'ws') + '/api/ws',
+    apiKey: DEVICE_API_KEY,
   });
 
   const barrierExit = new BarrierListener({
     deviceId: 'dev_barrier_exit_1',
     laneId: 'lane_exit_1',
     wsUrl: API_BASE.replace('http', 'ws') + '/api/ws',
+    apiKey: DEVICE_API_KEY,
   });
 
   // 시작

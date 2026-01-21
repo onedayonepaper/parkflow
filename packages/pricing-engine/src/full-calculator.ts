@@ -78,6 +78,7 @@ export function calculateWithDiscounts(input: FullCalculationInput): FullCalcula
     calculatedAt: nowIso(),
     ratePlanId: ratePlan.id,
     ratePlanName: ratePlan.name,
+    appliedRateType: feeCalc.appliedRateType,
   };
 
   return {

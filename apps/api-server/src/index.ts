@@ -17,7 +17,17 @@ import { ratePlanRoutes } from './routes/rate-plan.js';
 import { discountRoutes } from './routes/discount.js';
 import { membershipRoutes } from './routes/membership.js';
 import { statsRoutes } from './routes/stats.js';
+import { auditRoutes } from './routes/audit.js';
+import { kioskRoutes } from './routes/kiosk.js';
+import { userRoutes } from './routes/user.js';
+import { blacklistRoutes } from './routes/blacklist.js';
+import { siteRoutes } from './routes/site.js';
+import { notificationRoutes } from './routes/notification.js';
+import { settingsRoutes } from './routes/settings.js';
+import { laneRoutes } from './routes/lane.js';
+import { deviceManagementRoutes } from './routes/device-management.js';
 import { createWsHandler } from './ws/handler.js';
+import { initializeHardware, shutdownHardware } from './services/hardware.js';
 
 // Validate environment variables
 const env = validateEnv(apiServerEnvSchema);
@@ -36,6 +46,9 @@ function parseCorsOrigins(corsOrigin: string): string[] | boolean {
 async function main() {
   // Initialize database
   initDb();
+
+  // Initialize hardware manager
+  await initializeHardware();
 
   const app = Fastify({
     logger: {
@@ -219,8 +232,68 @@ ParkFlow는 LPR(번호판 인식) 기반 주차장 관리 시스템입니다.
     }
   });
 
-  // Health check
+  // Health check - enhanced
+  const startTime = Date.now();
+  app.get('/api/health', async () => {
+    const memUsage = process.memoryUsage();
+    const uptime = (Date.now() - startTime) / 1000;
+
+    // Check database status
+    let dbStatus = 'ok';
+    let dbSize = '-';
+    try {
+      const { getDb } = await import('./db/index.js');
+      const db = getDb();
+      db.prepare('SELECT 1').get();
+
+      // Get database file size
+      const fs = await import('fs');
+      const path = await import('path');
+      const dbPath = path.join(process.cwd(), 'data', 'parkflow.db');
+      if (fs.existsSync(dbPath)) {
+        const stats = fs.statSync(dbPath);
+        const sizeInMB = (stats.size / 1024 / 1024).toFixed(2);
+        dbSize = `${sizeInMB} MB`;
+      }
+    } catch (err) {
+      dbStatus = 'error';
+    }
+
+    return {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      uptime,
+      version: '1.0.0',
+      database: {
+        status: dbStatus,
+        size: dbSize,
+      },
+      memory: {
+        used: memUsage.heapUsed,
+        total: memUsage.heapTotal,
+        percentage: (memUsage.heapUsed / memUsage.heapTotal) * 100,
+      },
+    };
+  });
+
+  // Legacy health endpoint (for backward compatibility)
   app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
+
+  // System info endpoint
+  app.get('/api/system/info', async () => {
+    const os = await import('os');
+    return {
+      ok: true,
+      data: {
+        nodeVersion: process.version,
+        platform: os.platform(),
+        arch: os.arch(),
+        cpuCount: os.cpus().length,
+        hostname: os.hostname(),
+      },
+      error: null,
+    };
+  });
 
   // API Routes
   app.register(authRoutes, { prefix: '/api/auth' });
@@ -231,6 +304,15 @@ ParkFlow는 LPR(번호판 인식) 기반 주차장 관리 시스템입니다.
   app.register(discountRoutes, { prefix: '/api/discount-rules' });
   app.register(membershipRoutes, { prefix: '/api/memberships' });
   app.register(statsRoutes, { prefix: '/api/stats' });
+  app.register(auditRoutes, { prefix: '/api/audit' });
+  app.register(kioskRoutes, { prefix: '/api/kiosk' });
+  app.register(userRoutes, { prefix: '/api/users' });
+  app.register(blacklistRoutes, { prefix: '/api/blacklist' });
+  app.register(siteRoutes, { prefix: '/api/sites' });
+  app.register(notificationRoutes, { prefix: '/api/notifications' });
+  app.register(settingsRoutes, { prefix: '/api/settings' });
+  app.register(laneRoutes, { prefix: '/api/lanes' });
+  app.register(deviceManagementRoutes, { prefix: '/api/devices' });
 
   // WebSocket (with JWT authentication)
   const wsHandler = createWsHandler(app);
@@ -269,6 +351,10 @@ ParkFlow는 LPR(번호판 인식) 기반 주차장 관리 시스템입니다.
       // Close the Fastify server (stops accepting new connections)
       await app.close();
       console.log('✅ Server closed successfully');
+
+      // Close hardware connections
+      shutdownHardware();
+      console.log('✅ Hardware connections closed');
 
       // Close database connection
       const { closeDb } = await import('./db/index.js');

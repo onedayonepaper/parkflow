@@ -4,6 +4,7 @@ export interface BarrierListenerConfig {
   deviceId: string;
   laneId: string;
   wsUrl: string;
+  apiKey?: string;
 }
 
 export class BarrierListener {
@@ -17,7 +18,11 @@ export class BarrierListener {
 
   connect(): void {
     try {
-      this.ws = new WebSocket(this.config.wsUrl);
+      // API 키와 deviceId를 쿼리 파라미터로 전달
+      const wsUrlWithAuth = this.config.apiKey
+        ? `${this.config.wsUrl}?apiKey=${this.config.apiKey}&deviceId=${this.config.deviceId}`
+        : this.config.wsUrl;
+      this.ws = new WebSocket(wsUrlWithAuth);
 
       this.ws.on('open', () => {
         console.log(`[BARRIER] ${this.config.deviceId} WebSocket 연결됨`);

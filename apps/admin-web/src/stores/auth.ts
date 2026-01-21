@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
+import { wsClient } from '../lib/ws';
 
 interface User {
   id: string;
@@ -22,11 +23,23 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       user: null,
       isAuthenticated: false,
-      login: (token, user) => set({ token, user, isAuthenticated: true }),
-      logout: () => set({ token: null, user: null, isAuthenticated: false }),
+      login: (token, user) => {
+        wsClient.setToken(token);
+        set({ token, user, isAuthenticated: true });
+      },
+      logout: () => {
+        wsClient.setToken(null);
+        set({ token: null, user: null, isAuthenticated: false });
+      },
     }),
     {
       name: 'parkflow-auth',
+      onRehydrateStorage: () => (state) => {
+        // 페이지 새로고침 시 저장된 토큰으로 WebSocket 연결
+        if (state?.token) {
+          wsClient.setToken(state.token);
+        }
+      },
     }
   )
 );

@@ -11,6 +11,18 @@ const navItems = [
   { path: '/rate-plans', label: '요금 정책', icon: '💰' },
   { path: '/discount-rules', label: '할인 규칙', icon: '🎫' },
   { path: '/memberships', label: '정기권', icon: '🎟️' },
+  { path: '/blacklist', label: '블랙리스트', icon: '🚫' },
+  { path: '/devices', label: '장비 관리', icon: '📷' },
+  { path: '/kiosk', label: '키오스크', icon: '🖥️' },
+  { path: '/reports', label: '통계 리포트', icon: '📈' },
+  { path: '/notifications', label: '알림 관리', icon: '🔔' },
+  { path: '/audit', label: '감사 로그', icon: '📋' },
+  { path: '/sites', label: '주차장 관리', icon: '🏢' },
+  { path: '/users', label: '사용자 관리', icon: '👥' },
+  { path: '/settings', label: '설정', icon: '⚙️' },
+  { path: '/guide', label: '사용 가이드', icon: '📖' },
+  { path: '/installation', label: '설치 가이드', icon: '🛠️' },
+  { path: '/status', label: '환경 상태', icon: '🔍' },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {
