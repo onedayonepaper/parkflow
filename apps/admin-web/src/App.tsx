@@ -20,6 +20,7 @@ import AuditLogPage from './pages/AuditLogPage';
 import SettingsPage from './pages/SettingsPage';
 import UsersPage from './pages/UsersPage';
 import BlacklistPage from './pages/BlacklistPage';
+import WhitelistPage from './pages/WhitelistPage';
 import SitesPage from './pages/SitesPage';
 import NotificationsPage from './pages/NotificationsPage';
 import DevicesPage from './pages/DevicesPage';
@@ -63,6 +64,7 @@ export default function App() {
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/users" element={<UsersPage />} />
                 <Route path="/blacklist" element={<BlacklistPage />} />
+                <Route path="/whitelist" element={<WhitelistPage />} />
                 <Route path="/sites" element={<SitesPage />} />
                 <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/devices" element={<DevicesPage />} />

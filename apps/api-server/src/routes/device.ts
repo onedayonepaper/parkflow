@@ -138,13 +138,19 @@ export async function deviceRoutes(app: FastifyInstance) {
         });
       }
 
-      // 2. 정기권 확인
+      // 2. VIP 화이트리스트 확인
+      const vipEntry = db.prepare(`
+        SELECT id, name, reason FROM vip_whitelist
+        WHERE plate_no = ? AND is_active = 1
+      `).get(plateNoNorm) as any;
+
+      // 3. 정기권 확인
       const membership = db.prepare(`
         SELECT id, member_name FROM memberships
         WHERE plate_no = ? AND valid_from <= ? AND valid_to >= ?
       `).get(plateNoNorm, capturedAt, capturedAt) as any;
 
-      // 3. 활성 세션 확인 (PARKING 상태)
+      // 4. 활성 세션 확인 (PARKING 상태)
       const existingSession = db.prepare(`
         SELECT id FROM parking_sessions
         WHERE plate_no = ? AND status = 'PARKING'
@@ -178,7 +184,7 @@ export async function deviceRoutes(app: FastifyInstance) {
           now
         );
 
-        // 세션 업데이트 브로드캐스트 (정기권 정보 포함)
+        // 세션 업데이트 브로드캐스트 (정기권/VIP 정보 포함)
         broadcast({
           type: 'SESSION_UPDATED',
           data: {
@@ -188,11 +194,15 @@ export async function deviceRoutes(app: FastifyInstance) {
             entryAt: capturedAt,
             isMember: !!membership,
             memberName: membership?.member_name || null,
+            isVip: !!vipEntry,
+            vipName: vipEntry?.name || null,
           },
         });
 
-        // 정기권 차량이면 입차 시 바로 차단기 열기
-        if (membership) {
+        // VIP 또는 정기권 차량이면 입차 시 바로 차단기 열기
+        if (vipEntry) {
+          await issueBarrierOpen(db, laneId, 'VIP_ENTRY', sessionId);
+        } else if (membership) {
           await issueBarrierOpen(db, laneId, 'MEMBERSHIP_ENTRY', sessionId);
         }
       }
@@ -211,13 +221,42 @@ export async function deviceRoutes(app: FastifyInstance) {
       if (session) {
         sessionId = session.id as string;
 
+        // VIP 화이트리스트 확인
+        const vipEntry = db.prepare(`
+          SELECT id, name, reason FROM vip_whitelist
+          WHERE plate_no = ? AND is_active = 1
+        `).get(plateNoNorm) as any;
+
         // 정기권 확인
         const membership = db.prepare(`
           SELECT id FROM memberships
           WHERE plate_no = ? AND valid_from <= ? AND valid_to >= ?
         `).get(plateNoNorm, now, now) as any;
 
-        if (membership) {
+        if (vipEntry) {
+          // VIP 차량: 바로 CLOSED 처리 (무료)
+          db.prepare(`
+            UPDATE parking_sessions
+            SET status = 'CLOSED', exit_at = ?, exit_lane_id = ?,
+                final_fee = 0, close_reason = 'VIP_FREE_EXIT', updated_at = ?
+            WHERE id = ?
+          `).run(capturedAt, laneId, now, sessionId);
+
+          // 차단기 오픈 명령
+          await issueBarrierOpen(db, laneId, 'VIP_FREE_EXIT', sessionId);
+
+          broadcast({
+            type: 'SESSION_UPDATED',
+            data: {
+              sessionId,
+              status: 'CLOSED',
+              plateNo: plateNoNorm,
+              finalFee: 0,
+              closeReason: 'VIP_FREE_EXIT',
+              vipName: vipEntry.name,
+            },
+          });
+        } else if (membership) {
           // 정기권 차량: 바로 CLOSED 처리
           db.prepare(`
             UPDATE parking_sessions

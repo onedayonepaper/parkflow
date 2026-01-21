@@ -12,6 +12,7 @@ const navItems = [
   { path: '/discount-rules', label: '할인 규칙', icon: '🎫' },
   { path: '/memberships', label: '정기권', icon: '🎟️' },
   { path: '/blacklist', label: '블랙리스트', icon: '🚫' },
+  { path: '/whitelist', label: 'VIP 자동출차', icon: '👑' },
   { path: '/devices', label: '장비 관리', icon: '📷' },
   { path: '/kiosk', label: '키오스크', icon: '🖥️' },
   { path: '/reports', label: '통계 리포트', icon: '📈' },

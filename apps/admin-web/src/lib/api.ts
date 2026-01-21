@@ -378,4 +378,28 @@ export const api = {
 
   deleteLane: (id: string) =>
     request<any>(`/lanes/${id}`, { method: 'DELETE' }),
+
+  // VIP Whitelist
+  getWhitelist: (params?: Record<string, string>) => {
+    const query = params ? '?' + new URLSearchParams(params).toString() : '';
+    return request<{ items: any[]; total: number }>(`/whitelist${query}`);
+  },
+
+  createWhitelist: (data: { plateNo: string; name?: string; reason?: string }) =>
+    request<any>('/whitelist', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateWhitelist: (id: string, data: { plateNo?: string; name?: string; reason?: string; isActive?: boolean }) =>
+    request<any>(`/whitelist/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteWhitelist: (id: string) =>
+    request<any>(`/whitelist/${id}`, { method: 'DELETE' }),
+
+  checkWhitelist: (plateNo: string) =>
+    request<{ isWhitelisted: boolean; entry?: any }>(`/whitelist/check/${plateNo}`),
 };

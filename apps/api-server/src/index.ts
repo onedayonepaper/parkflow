@@ -26,6 +26,7 @@ import { notificationRoutes } from './routes/notification.js';
 import { settingsRoutes } from './routes/settings.js';
 import { laneRoutes } from './routes/lane.js';
 import { deviceManagementRoutes } from './routes/device-management.js';
+import { whitelistRoutes } from './routes/whitelist.js';
 import { createWsHandler } from './ws/handler.js';
 import { initializeHardware, shutdownHardware } from './services/hardware.js';
 
@@ -313,6 +314,7 @@ ParkFlow는 LPR(번호판 인식) 기반 주차장 관리 시스템입니다.
   app.register(settingsRoutes, { prefix: '/api/settings' });
   app.register(laneRoutes, { prefix: '/api/lanes' });
   app.register(deviceManagementRoutes, { prefix: '/api/devices' });
+  app.register(whitelistRoutes, { prefix: '/api/whitelist' });
 
   // WebSocket (with JWT authentication)
   const wsHandler = createWsHandler(app);

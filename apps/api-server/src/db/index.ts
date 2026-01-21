@@ -348,6 +348,24 @@ function runMigrations(database: Database.Database): void {
       FOREIGN KEY(site_id) REFERENCES sites(id)
     );
 
+    -- 19) VIP Whitelist - 무료 자동출차 차량
+    CREATE TABLE IF NOT EXISTS vip_whitelist (
+      id TEXT PRIMARY KEY,
+      site_id TEXT NOT NULL,
+      plate_no TEXT NOT NULL,
+      name TEXT,
+      reason TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_by TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY(site_id) REFERENCES sites(id),
+      FOREIGN KEY(created_by) REFERENCES users(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_vip_whitelist_plate ON vip_whitelist(plate_no);
+    CREATE INDEX IF NOT EXISTS idx_vip_whitelist_site ON vip_whitelist(site_id, is_active);
+
   `;
 
   // Add columns if not exists (SQLite workaround)
