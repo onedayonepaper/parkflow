@@ -24,6 +24,7 @@ const navItems = [
   { path: '/guide', label: '사용 가이드', icon: '📖' },
   { path: '/installation', label: '설치 가이드', icon: '🛠️' },
   { path: '/hardware', label: '하드웨어 가이드', icon: '🔌' },
+  { path: '/simulation', label: '시뮬레이션', icon: '🎮' },
   { path: '/status', label: '환경 상태', icon: '🔍' },
 ];
 

@@ -645,6 +645,12 @@ function LprSection() {
       </div>
 
       <SubTitle>연동 테스트</SubTitle>
+
+      <InfoBox type="info">
+        <strong>시뮬레이션 페이지 활용:</strong> 관리자 페이지 → 시뮬레이션 메뉴에서 GUI로 입/출차 테스트를 수행할 수 있습니다.
+        하드웨어 설치 전 소프트웨어 동작을 먼저 확인하세요.
+      </InfoBox>
+
       <CodeBlock title="curl 테스트 (입차)">{`curl -X POST http://192.168.1.10:3000/api/device/lpr/events \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -664,6 +670,25 @@ function LprSection() {
     "plateNo": "12가3456",
     "capturedAt": "'$(date -Iseconds)'"
   }'`}</CodeBlock>
+
+      <SubTitle>시뮬레이션 API (하드웨어 없이 테스트)</SubTitle>
+      <Paragraph>
+        하드웨어 설치 전 ParkFlow의 모든 기능을 테스트할 수 있습니다.
+      </Paragraph>
+      <CodeBlock title="시뮬레이션 입차 API">{`curl -X POST http://localhost:3000/api/simulation/entry \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer YOUR_TOKEN" \\
+  -d '{"plateNo": "12가3456"}'`}</CodeBlock>
+
+      <CodeBlock title="시뮬레이션 출차 API">{`curl -X POST http://localhost:3000/api/simulation/exit \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer YOUR_TOKEN" \\
+  -d '{"plateNo": "12가3456"}'`}</CodeBlock>
+
+      <CodeBlock title="대량 입차 시뮬레이션">{`curl -X POST http://localhost:3000/api/simulation/bulk-entry \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer YOUR_TOKEN" \\
+  -d '{"count": 10}'`}</CodeBlock>
 
       <InfoBox type="warning">
         카메라 구매 전 반드시 HTTP POST로 번호판 인식 결과를 전송할 수 있는지 확인하세요.
