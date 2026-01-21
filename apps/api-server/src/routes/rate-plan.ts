@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import type Database from 'better-sqlite3';
 import { getDb } from '../db/index.js';
 import {
   RatePlanRequestSchema,
@@ -9,6 +10,36 @@ import {
   type ApiResponse,
   type RatePlan,
 } from '@parkflow/shared';
+
+/**
+ * 기존 활성 요금제 비활성화 (단일 활성 요금제 보장)
+ * @param db 데이터베이스 인스턴스
+ * @param siteId 사이트 ID
+ * @param excludeId 제외할 요금제 ID (수정 시 현재 요금제 제외)
+ */
+function deactivateOtherPlans(db: Database.Database, siteId: string, excludeId?: string): void {
+  const now = nowIso();
+  if (excludeId) {
+    db.prepare(`UPDATE rate_plans SET is_active = 0, updated_at = ? WHERE site_id = ? AND id != ?`).run(now, siteId, excludeId);
+  } else {
+    db.prepare(`UPDATE rate_plans SET is_active = 0, updated_at = ? WHERE site_id = ?`).run(now, siteId);
+  }
+}
+
+/**
+ * DB row를 RatePlan 객체로 변환
+ */
+function mapRatePlan(row: any): Omit<RatePlan, 'rules'> & { rules: any } {
+  return {
+    id: row.id,
+    siteId: row.site_id,
+    name: row.name,
+    isActive: Boolean(row.is_active),
+    rules: JSON.parse(row.rules_json),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
 
 export async function ratePlanRoutes(app: FastifyInstance) {
   // GET /api/rate-plans
@@ -154,7 +185,7 @@ export async function ratePlanRoutes(app: FastifyInstance) {
 
     // 활성화 시 기존 활성 요금제 비활성화
     if (isActive) {
-      db.prepare(`UPDATE rate_plans SET is_active = 0, updated_at = ? WHERE site_id = ?`).run(now, DEFAULT_SITE_ID);
+      deactivateOtherPlans(db, DEFAULT_SITE_ID);
     }
 
     db.prepare(`
@@ -227,7 +258,7 @@ export async function ratePlanRoutes(app: FastifyInstance) {
 
     // 활성화 시 기존 활성 요금제 비활성화
     if (isActive) {
-      db.prepare(`UPDATE rate_plans SET is_active = 0, updated_at = ? WHERE site_id = ? AND id != ?`).run(now, DEFAULT_SITE_ID, id);
+      deactivateOtherPlans(db, DEFAULT_SITE_ID, id);
     }
 
     db.prepare(`
@@ -278,10 +309,8 @@ export async function ratePlanRoutes(app: FastifyInstance) {
       });
     }
 
-    // 기존 활성 요금제 비활성화
-    db.prepare(`UPDATE rate_plans SET is_active = 0, updated_at = ? WHERE site_id = ?`).run(now, DEFAULT_SITE_ID);
-
-    // 해당 요금제 활성화
+    // 기존 활성 요금제 비활성화 후 해당 요금제 활성화
+    deactivateOtherPlans(db, DEFAULT_SITE_ID, id);
     db.prepare(`UPDATE rate_plans SET is_active = 1, updated_at = ? WHERE id = ?`).run(now, id);
 
     // Audit

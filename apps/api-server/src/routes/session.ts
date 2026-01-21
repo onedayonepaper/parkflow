@@ -103,25 +103,7 @@ export async function sessionRoutes(app: FastifyInstance) {
 
     const sessions = db.prepare(sql).all(...params) as any[];
 
-    const items = sessions.map((s) => ({
-      id: s.id,
-      siteId: s.site_id,
-      entryLaneId: s.entry_lane_id,
-      exitLaneId: s.exit_lane_id,
-      plateNo: s.plate_no,
-      status: s.status,
-      entryAt: s.entry_at,
-      exitAt: s.exit_at,
-      ratePlanId: s.rate_plan_id,
-      ratePlanName: s.rate_plan_name,
-      rawFee: s.raw_fee,
-      discountTotal: s.discount_total,
-      finalFee: s.final_fee,
-      paymentStatus: s.payment_status,
-      closeReason: s.close_reason,
-      createdAt: s.created_at,
-      updatedAt: s.updated_at,
-    }));
+    const items = sessions.map(mapSession);
 
     return reply.send({
       ok: true,
@@ -194,24 +176,8 @@ export async function sessionRoutes(app: FastifyInstance) {
     return reply.send({
       ok: true,
       data: {
-        id: session.id,
-        siteId: session.site_id,
-        entryLaneId: session.entry_lane_id,
-        exitLaneId: session.exit_lane_id,
-        plateNo: session.plate_no,
-        status: session.status,
-        entryAt: session.entry_at,
-        exitAt: session.exit_at,
-        ratePlanId: session.rate_plan_id,
-        ratePlanName: session.rate_plan_name,
-        rawFee: session.raw_fee,
-        discountTotal: session.discount_total,
-        finalFee: session.final_fee,
+        ...mapSession(session),
         feeBreakdown: JSON.parse(session.fee_breakdown_json || '{}'),
-        paymentStatus: session.payment_status,
-        closeReason: session.close_reason,
-        createdAt: session.created_at,
-        updatedAt: session.updated_at,
         entryEvent: entryEvent ? mapEvent(entryEvent) : null,
         exitEvent: exitEvent ? mapEvent(exitEvent) : null,
         discountApplications: discounts.map(mapDiscount),
@@ -617,6 +583,31 @@ export async function sessionRoutes(app: FastifyInstance) {
       error: null,
     });
   });
+}
+
+/**
+ * DB row를 ParkingSession 객체로 변환
+ */
+function mapSession(s: any) {
+  return {
+    id: s.id,
+    siteId: s.site_id,
+    entryLaneId: s.entry_lane_id,
+    exitLaneId: s.exit_lane_id,
+    plateNo: s.plate_no,
+    status: s.status,
+    entryAt: s.entry_at,
+    exitAt: s.exit_at,
+    ratePlanId: s.rate_plan_id,
+    ratePlanName: s.rate_plan_name,
+    rawFee: s.raw_fee,
+    discountTotal: s.discount_total,
+    finalFee: s.final_fee,
+    paymentStatus: s.payment_status,
+    closeReason: s.close_reason,
+    createdAt: s.created_at,
+    updatedAt: s.updated_at,
+  };
 }
 
 function mapEvent(e: any) {

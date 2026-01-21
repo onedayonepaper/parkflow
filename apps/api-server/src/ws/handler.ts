@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyBaseLogger } from 'fastify';
 import type { WebSocket, RawData } from 'ws';
 import { WS_EVENT_TYPE } from '@parkflow/shared';
 
@@ -12,6 +12,9 @@ interface AuthenticatedClient {
 }
 
 const clients = new Map<WebSocket, AuthenticatedClient>();
+
+// 로거 참조 (createWsHandler에서 설정)
+let logger: FastifyBaseLogger | null = null;
 
 export interface WsMessage {
   type: keyof typeof WS_EVENT_TYPE;
@@ -30,13 +33,16 @@ export interface JwtPayload {
  * @param app Fastify 인스턴스 (JWT 검증용)
  */
 export function createWsHandler(app: FastifyInstance) {
+  // 로거 참조 저장
+  logger = app.log;
+
   return function wsHandler(socket: WebSocket, request: FastifyRequest) {
     // 쿼리 파라미터에서 토큰 추출
     const url = new URL(request.url, `http://${request.headers.host}`);
     const token = url.searchParams.get('token');
 
     if (!token) {
-      console.log('[WS] Connection rejected: No token provided');
+      app.log.warn('[WS] Connection rejected: No token provided');
       socket.close(4001, 'Authentication required');
       return;
     }
@@ -46,7 +52,7 @@ export function createWsHandler(app: FastifyInstance) {
     try {
       payload = app.jwt.verify<JwtPayload>(token);
     } catch (err) {
-      console.log('[WS] Connection rejected: Invalid token');
+      app.log.warn('[WS] Connection rejected: Invalid token');
       socket.close(4002, 'Invalid token');
       return;
     }
@@ -61,7 +67,7 @@ export function createWsHandler(app: FastifyInstance) {
     };
     clients.set(socket, client);
 
-    console.log(`[WS] Client connected: ${payload.username} (${payload.role}). Total: ${clients.size}`);
+    app.log.info({ username: payload.username, role: payload.role, total: clients.size }, '[WS] Client connected');
 
     // 연결 확인 메시지
     socket.send(JSON.stringify({
@@ -77,26 +83,26 @@ export function createWsHandler(app: FastifyInstance) {
     socket.on('message', (raw: RawData) => {
       try {
         const message = JSON.parse(raw.toString());
-        console.log(`[WS] Received from ${payload.username}:`, message);
+        app.log.debug({ username: payload.username, message }, '[WS] Message received');
 
         // 필요 시 클라이언트 메시지 처리
         if (message.type === 'PING') {
           socket.send(JSON.stringify({ type: 'PONG', data: { timestamp: new Date().toISOString() } }));
         }
       } catch (err) {
-        console.error('[WS] Failed to parse message:', err);
+        app.log.error({ err }, '[WS] Failed to parse message');
       }
     });
 
     // 연결 종료
     socket.on('close', () => {
       clients.delete(socket);
-      console.log(`[WS] Client disconnected: ${payload.username}. Total: ${clients.size}`);
+      app.log.info({ username: payload.username, total: clients.size }, '[WS] Client disconnected');
     });
 
     // 에러 처리
     socket.on('error', (err: Error) => {
-      console.error('[WS] Socket error:', err);
+      app.log.error({ err }, '[WS] Socket error');
       clients.delete(socket);
     });
   };
@@ -114,7 +120,7 @@ export function broadcast(message: WsMessage) {
         socket.send(payload);
       }
     } catch (err) {
-      console.error('[WS] Broadcast error:', err);
+      logger?.error({ err }, '[WS] Broadcast error');
     }
   }
 }
@@ -131,7 +137,7 @@ export function broadcastToSite(message: WsMessage, siteId: string) {
         socket.send(payload);
       }
     } catch (err) {
-      console.error('[WS] Site broadcast error:', err);
+      logger?.error({ err, siteId }, '[WS] Site broadcast error');
     }
   }
 }
@@ -151,7 +157,7 @@ export function broadcastTo(
         socket.send(payload);
       }
     } catch (err) {
-      console.error('[WS] Targeted broadcast error:', err);
+      logger?.error({ err }, '[WS] Targeted broadcast error');
     }
   }
 }
