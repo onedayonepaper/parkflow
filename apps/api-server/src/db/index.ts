@@ -199,6 +199,8 @@ function runMigrations(database: Database.Database): void {
       status TEXT NOT NULL CHECK(status IN ('PENDING','PAID','FAILED','CANCELLED')),
       pg_tx_id TEXT,
       approved_at TEXT,
+      cancelled_at TEXT,
+      cancel_reason TEXT,
       raw_json TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,

@@ -87,6 +87,19 @@ export const api = {
     }),
 
   // Payments
+  getPayments: (params?: Record<string, string>) => {
+    const query = params ? '?' + new URLSearchParams(params).toString() : '';
+    return request<{ items: any[]; total: number; page: number; limit: number; totalPages: number }>(
+      `/payments${query}`
+    );
+  },
+
+  cancelPayment: (id: string, reason: string) =>
+    request<any>(`/payments/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+
   mockPayment: (data: { sessionId: string; amount: number }) =>
     request<any>('/payments/mock/approve', {
       method: 'POST',
