@@ -6,6 +6,7 @@ import KioskPaymentSuccessPage from './pages/KioskPaymentSuccessPage';
 import KioskPaymentFailPage from './pages/KioskPaymentFailPage';
 import UsageGuidePage from './pages/UsageGuidePage';
 import InstallationGuidePage from './pages/InstallationGuidePage';
+import HardwareGuidePage from './pages/HardwareGuidePage';
 import EnvironmentStatusPage from './pages/EnvironmentStatusPage';
 import DashboardPage from './pages/DashboardPage';
 import SessionsPage from './pages/SessionsPage';
@@ -67,6 +68,7 @@ export default function App() {
                 <Route path="/devices" element={<DevicesPage />} />
                 <Route path="/guide" element={<UsageGuidePage />} />
                 <Route path="/installation" element={<InstallationGuidePage />} />
+                <Route path="/hardware" element={<HardwareGuidePage />} />
                 <Route path="/status" element={<EnvironmentStatusPage />} />
               </Routes>
             </Layout>
