@@ -76,21 +76,59 @@ async function main() {
       openapi: '3.0.0',
       info: {
         title: 'ParkFlow API',
-        description: '주차장 관리 시스템 API 문서',
+        description: `## 주차장 관리 시스템 API
+
+ParkFlow는 LPR(번호판 인식) 기반 주차장 관리 시스템입니다.
+
+### 주요 기능
+- 🚗 **실시간 차량 입/출차 관리**
+- 💰 **요금 자동 계산 및 결제**
+- 📊 **통계 및 분석 대시보드**
+- 🎫 **정기권 및 할인 관리**
+
+### 인증
+모든 API는 JWT 토큰 인증이 필요합니다. \`/api/auth/login\` 엔드포인트에서 토큰을 발급받으세요.
+
+### 에러 응답
+모든 에러 응답은 다음 형식을 따릅니다:
+\`\`\`json
+{
+  "ok": false,
+  "data": null,
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "에러 메시지"
+  }
+}
+\`\`\`
+`,
         version: '1.0.0',
+        contact: {
+          name: 'ParkFlow Support',
+          email: 'support@parkflow.io',
+        },
+        license: {
+          name: 'MIT',
+          url: 'https://opensource.org/licenses/MIT',
+        },
+      },
+      externalDocs: {
+        description: 'GitHub Repository',
+        url: 'https://github.com/onedayonepaper/parkflow',
       },
       servers: [
         { url: `http://localhost:${PORT}`, description: 'Development server' },
+        { url: 'https://api.parkflow.io', description: 'Production server' },
       ],
       tags: [
-        { name: 'Auth', description: '인증 관련 API' },
-        { name: 'Device', description: '디바이스 (LPR/Barrier) API' },
-        { name: 'Session', description: '주차 세션 관리 API' },
-        { name: 'Payment', description: '결제 API' },
-        { name: 'RatePlan', description: '요금 정책 API' },
-        { name: 'Discount', description: '할인 규칙 API' },
-        { name: 'Membership', description: '정기권 API' },
-        { name: 'Stats', description: '통계 API' },
+        { name: 'Auth', description: '🔐 인증 및 사용자 관리 - 로그인, 토큰 갱신, 사용자 정보 조회' },
+        { name: 'Device', description: '📷 디바이스 API - LPR 카메라 이벤트 수신, 차단기 제어' },
+        { name: 'Session', description: '🚗 주차 세션 관리 - 세션 조회, 수정, 요금 재계산, 강제 종료' },
+        { name: 'Payment', description: '💳 결제 처리 - 결제 승인, 취소, 내역 조회' },
+        { name: 'RatePlan', description: '💰 요금 정책 - 요금제 CRUD, 활성화/비활성화' },
+        { name: 'Discount', description: '🎫 할인 규칙 - 할인 정책 관리, 적용' },
+        { name: 'Membership', description: '📇 정기권 관리 - 정기권 등록, 조회, 삭제' },
+        { name: 'Stats', description: '📊 통계 및 분석 - 대시보드, 시간대별, 주간 통계' },
       ],
       components: {
         securitySchemes: {
@@ -98,29 +136,65 @@ async function main() {
             type: 'http',
             scheme: 'bearer',
             bearerFormat: 'JWT',
+            description: 'JWT 토큰을 입력하세요. 예: `Bearer eyJhbGciOiJIUzI1NiIs...`',
           },
         },
         schemas: {
           ApiResponse: {
             type: 'object',
+            description: '표준 API 응답 형식',
             properties: {
-              ok: { type: 'boolean' },
-              data: { type: 'object', nullable: true },
+              ok: { type: 'boolean', description: '요청 성공 여부', example: true },
+              data: { type: 'object', nullable: true, description: '응답 데이터' },
               error: {
                 type: 'object',
                 nullable: true,
+                description: '에러 정보 (ok가 false일 때만 존재)',
                 properties: {
-                  code: { type: 'string' },
-                  message: { type: 'string' },
+                  code: { type: 'string', description: '에러 코드', example: 'VALIDATION_ERROR' },
+                  message: { type: 'string', description: '에러 메시지', example: '필수 필드가 누락되었습니다' },
                 },
               },
             },
           },
           Error: {
             type: 'object',
+            description: '에러 객체',
             properties: {
-              code: { type: 'string' },
-              message: { type: 'string' },
+              code: { type: 'string', description: '에러 코드' },
+              message: { type: 'string', description: '에러 메시지' },
+            },
+          },
+          ParkingSession: {
+            type: 'object',
+            description: '주차 세션 정보',
+            properties: {
+              id: { type: 'string', example: 'sess_abc123' },
+              plateNo: { type: 'string', example: '12가3456' },
+              status: { type: 'string', enum: ['PARKING', 'EXIT_PENDING', 'PAID', 'CLOSED', 'ERROR'] },
+              entryAt: { type: 'string', format: 'date-time' },
+              exitAt: { type: 'string', format: 'date-time', nullable: true },
+              rawFee: { type: 'integer', example: 5000 },
+              discountTotal: { type: 'integer', example: 1000 },
+              finalFee: { type: 'integer', example: 4000 },
+            },
+          },
+          RatePlan: {
+            type: 'object',
+            description: '요금 정책',
+            properties: {
+              id: { type: 'string', example: 'rp_abc123' },
+              name: { type: 'string', example: '기본 요금제' },
+              isActive: { type: 'boolean', example: true },
+              rules: {
+                type: 'object',
+                properties: {
+                  baseFee: { type: 'integer', example: 1000 },
+                  baseMinutes: { type: 'integer', example: 30 },
+                  additionalFee: { type: 'integer', example: 500 },
+                  additionalMinutes: { type: 'integer', example: 10 },
+                },
+              },
             },
           },
         },

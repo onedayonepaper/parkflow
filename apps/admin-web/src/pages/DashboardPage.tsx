@@ -1,6 +1,20 @@
 import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { wsClient } from '../lib/ws';
+import { BarChart, LineChart } from '../components/charts';
+import { useToast } from '../components/Toast';
+
+interface HourlyData {
+  hour: number;
+  entries: number;
+  exits: number;
+}
+
+interface DailyData {
+  date: string;
+  revenue: number;
+  sessions: number;
+}
 
 interface Event {
   id: string;
@@ -13,6 +27,7 @@ interface Event {
 }
 
 export default function DashboardPage() {
+  const { addToast } = useToast();
   const [stats, setStats] = useState({
     parking: 0,
     exitPending: 0,
@@ -22,6 +37,8 @@ export default function DashboardPage() {
     avgDurationMinutes: 0,
   });
   const [recentEvents, setRecentEvents] = useState<Event[]>([]);
+  const [hourlyData, setHourlyData] = useState<HourlyData[]>([]);
+  const [weeklyData, setWeeklyData] = useState<DailyData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -29,12 +46,19 @@ export default function DashboardPage() {
 
     // WebSocket 이벤트 구독
     const unsubPlate = wsClient.on('PLATE_EVENT', (data) => {
+      const isEntry = data.direction === 'ENTRY';
       addEvent({
         id: data.eventId,
-        type: data.direction === 'ENTRY' ? '입차' : '출차',
+        type: isEntry ? '입차' : '출차',
         plateNo: data.plateNo,
         sessionId: data.sessionId,
         timestamp: new Date().toISOString(),
+      });
+      addToast({
+        type: isEntry ? 'success' : 'info',
+        title: isEntry ? '차량 입차' : '차량 출차',
+        message: `${data.plateNo} 차량이 ${isEntry ? '입차' : '출차'}했습니다.`,
+        duration: 4000,
       });
       loadStats();
     });
@@ -48,6 +72,21 @@ export default function DashboardPage() {
         finalFee: data.finalFee,
         timestamp: new Date().toISOString(),
       });
+      if (data.status === 'PAID') {
+        addToast({
+          type: 'success',
+          title: '결제 완료',
+          message: `세션 ${data.sessionId.slice(0, 8)}... 결제가 완료되었습니다.`,
+          duration: 4000,
+        });
+      } else if (data.status === 'ERROR') {
+        addToast({
+          type: 'error',
+          title: '세션 오류',
+          message: `세션 ${data.sessionId.slice(0, 8)}...에 오류가 발생했습니다.`,
+          duration: 6000,
+        });
+      }
       loadStats();
     });
 
@@ -59,6 +98,12 @@ export default function DashboardPage() {
         finalFee: data.amount,
         timestamp: new Date().toISOString(),
       });
+      addToast({
+        type: 'success',
+        title: '💳 결제 완료',
+        message: `${data.amount.toLocaleString()}원 결제가 완료되었습니다.`,
+        duration: 5000,
+      });
       loadStats();
     });
 
@@ -67,21 +112,34 @@ export default function DashboardPage() {
       unsubSession();
       unsubPayment();
     };
-  }, []);
+  }, [addToast]);
 
   const loadStats = async () => {
-    const res = await api.getDashboardStats();
+    const [dashRes, hourlyRes, weeklyRes] = await Promise.all([
+      api.getDashboardStats(),
+      api.getHourlyStats(),
+      api.getWeeklyStats(),
+    ]);
 
-    if (res.ok && res.data) {
+    if (dashRes.ok && dashRes.data) {
       setStats({
-        parking: res.data.currentParking,
-        exitPending: res.data.exitPending,
-        todayRevenue: res.data.todayRevenue,
-        todayEntries: res.data.todayEntries,
-        todayExits: res.data.todayExits,
-        avgDurationMinutes: res.data.avgDurationMinutes,
+        parking: dashRes.data.currentParking,
+        exitPending: dashRes.data.exitPending,
+        todayRevenue: dashRes.data.todayRevenue,
+        todayEntries: dashRes.data.todayEntries,
+        todayExits: dashRes.data.todayExits,
+        avgDurationMinutes: dashRes.data.avgDurationMinutes,
       });
     }
+
+    if (hourlyRes.ok && hourlyRes.data) {
+      setHourlyData(hourlyRes.data.hourly);
+    }
+
+    if (weeklyRes.ok && weeklyRes.data) {
+      setWeeklyData(weeklyRes.data.daily);
+    }
+
     setLoading(false);
   };
 
@@ -145,6 +203,70 @@ export default function DashboardPage() {
           icon="⏱️"
           color="green"
         />
+      </div>
+
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Hourly Chart */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold mb-4">시간대별 입/출차</h3>
+          <div className="flex items-center gap-4 mb-4 text-sm">
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 rounded bg-blue-500" />
+              <span className="text-gray-600">입차</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 rounded bg-green-500" />
+              <span className="text-gray-600">출차</span>
+            </div>
+          </div>
+          {hourlyData.length > 0 ? (
+            <BarChart
+              data={hourlyData.map(h => ({
+                label: `${h.hour}시`,
+                value: h.entries,
+                secondaryValue: h.exits,
+              }))}
+              height={180}
+              primaryColor="#3B82F6"
+              secondaryColor="#10B981"
+              showLabels={false}
+            />
+          ) : (
+            <div className="h-[180px] flex items-center justify-center text-gray-400">
+              데이터 없음
+            </div>
+          )}
+          <div className="flex justify-between mt-2 text-xs text-gray-500">
+            <span>0시</span>
+            <span>6시</span>
+            <span>12시</span>
+            <span>18시</span>
+            <span>23시</span>
+          </div>
+        </div>
+
+        {/* Weekly Revenue Chart */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold mb-4">주간 매출 추이</h3>
+          {weeklyData.length > 0 ? (
+            <LineChart
+              data={weeklyData.map(d => ({
+                label: d.date.slice(5), // MM-DD
+                value: d.revenue,
+              }))}
+              height={200}
+              color="#10B981"
+              fillColor="rgba(16, 185, 129, 0.1)"
+              unit="원"
+              formatValue={(v) => `${(v / 1000).toFixed(0)}K`}
+            />
+          ) : (
+            <div className="h-[200px] flex items-center justify-center text-gray-400">
+              데이터 없음
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Recent Events */}

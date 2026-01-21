@@ -1,0 +1,51 @@
+# Dependencies
+node_modules
+**/node_modules
+
+# Build outputs
+dist
+**/dist
+build
+**/build
+
+# Development
+.git
+.gitignore
+*.md
+!README.md
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage
+**/coverage
+playwright-report
+**/playwright-report
+test-results
+**/test-results
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Database (will be created fresh in container)
+*.db
+*.db-*
+
+# Logs
+*.log
+logs
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
