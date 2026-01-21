@@ -23,6 +23,7 @@ import SitesPage from './pages/SitesPage';
 import NotificationsPage from './pages/NotificationsPage';
 import DevicesPage from './pages/DevicesPage';
 import Layout from './components/Layout';
+import { PWAUpdatePrompt, PWAInstallPrompt, OfflineIndicator } from './components/PWAPrompt';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -34,7 +35,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <Routes>
+    <>
+      <OfflineIndicator />
+      <PWAUpdatePrompt />
+      <PWAInstallPrompt />
+      <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/kiosk" element={<KioskPage />} />
       <Route path="/kiosk/payment/success" element={<KioskPaymentSuccessPage />} />
@@ -69,5 +74,6 @@ export default function App() {
         }
       />
     </Routes>
+    </>
   );
 }

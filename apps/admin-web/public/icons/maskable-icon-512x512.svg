@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Safe zone background for maskable icon -->
+  <rect width="512" height="512" fill="#3B82F6"/>
+  <!-- Content in safe zone (80% of icon, centered) -->
+  <text x="256" y="320" font-family="Arial, sans-serif" font-size="240" font-weight="bold" fill="white" text-anchor="middle">P</text>
+  <circle cx="370" cy="150" r="45" fill="#10B981"/>
+</svg>
