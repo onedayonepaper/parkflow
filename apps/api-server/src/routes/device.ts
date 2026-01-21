@@ -97,7 +97,7 @@ export async function deviceRoutes(app: FastifyInstance) {
       // 1. 블랙리스트 확인
       const blacklisted = db.prepare(`
         SELECT id, reason FROM blacklist
-        WHERE plate_no = ? AND (expires_at IS NULL OR expires_at > ?)
+        WHERE plate_no = ? AND is_active = 1 AND (blocked_until IS NULL OR blocked_until > ?)
       `).get(plateNoNorm, now) as any;
 
       if (blacklisted) {
@@ -140,7 +140,7 @@ export async function deviceRoutes(app: FastifyInstance) {
 
       // 2. 정기권 확인
       const membership = db.prepare(`
-        SELECT id, type, vehicle_type FROM memberships
+        SELECT id, member_name FROM memberships
         WHERE plate_no = ? AND valid_from <= ? AND valid_to >= ?
       `).get(plateNoNorm, capturedAt, capturedAt) as any;
 
@@ -187,7 +187,7 @@ export async function deviceRoutes(app: FastifyInstance) {
             plateNo: plateNoNorm,
             entryAt: capturedAt,
             isMember: !!membership,
-            membershipType: membership?.type || null,
+            memberName: membership?.member_name || null,
           },
         });
 
