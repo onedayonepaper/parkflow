@@ -134,4 +134,25 @@ export const api = {
 
   deleteMembership: (id: string) =>
     request<any>(`/memberships/${id}`, { method: 'DELETE' }),
+
+  // Stats
+  getDashboardStats: () =>
+    request<{
+      currentParking: number;
+      exitPending: number;
+      todayRevenue: number;
+      todayEntries: number;
+      todayExits: number;
+      avgDurationMinutes: number;
+    }>('/stats/dashboard'),
+
+  getHourlyStats: () =>
+    request<{
+      hourly: { hour: number; entries: number; exits: number }[];
+    }>('/stats/hourly'),
+
+  getWeeklyStats: () =>
+    request<{
+      daily: { date: string; revenue: number; sessions: number }[];
+    }>('/stats/weekly'),
 };

@@ -8,6 +8,7 @@ import { paymentRoutes } from '../routes/payment.js';
 import { ratePlanRoutes } from '../routes/rate-plan.js';
 import { discountRoutes } from '../routes/discount.js';
 import { membershipRoutes } from '../routes/membership.js';
+import { statsRoutes } from '../routes/stats.js';
 
 const JWT_SECRET = 'test-secret-key-for-integration-testing';
 
@@ -36,6 +37,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.register(ratePlanRoutes, { prefix: '/api/rate-plans' });
   app.register(discountRoutes, { prefix: '/api/discount-rules' });
   app.register(membershipRoutes, { prefix: '/api/memberships' });
+  app.register(statsRoutes, { prefix: '/api/stats' });
 
   await app.ready();
   return app;

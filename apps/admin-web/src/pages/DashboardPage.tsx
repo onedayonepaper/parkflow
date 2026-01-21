@@ -17,6 +17,9 @@ export default function DashboardPage() {
     parking: 0,
     exitPending: 0,
     todayRevenue: 0,
+    todayEntries: 0,
+    todayExits: 0,
+    avgDurationMinutes: 0,
   });
   const [recentEvents, setRecentEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,16 +70,18 @@ export default function DashboardPage() {
   }, []);
 
   const loadStats = async () => {
-    const [parkingRes, exitPendingRes] = await Promise.all([
-      api.getSessions({ status: 'PARKING', limit: '1' }),
-      api.getSessions({ status: 'EXIT_PENDING', limit: '1' }),
-    ]);
+    const res = await api.getDashboardStats();
 
-    setStats({
-      parking: parkingRes.data?.total || 0,
-      exitPending: exitPendingRes.data?.total || 0,
-      todayRevenue: 0, // TODO: 통계 API
-    });
+    if (res.ok && res.data) {
+      setStats({
+        parking: res.data.currentParking,
+        exitPending: res.data.exitPending,
+        todayRevenue: res.data.todayRevenue,
+        todayEntries: res.data.todayEntries,
+        todayExits: res.data.todayExits,
+        avgDurationMinutes: res.data.avgDurationMinutes,
+      });
+    }
     setLoading(false);
   };
 
@@ -97,7 +102,7 @@ export default function DashboardPage() {
       <h2 className="text-2xl font-bold text-gray-900">대시보드</h2>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <StatCard
           title="현재 주차중"
           value={stats.parking}
@@ -117,6 +122,27 @@ export default function DashboardPage() {
           value={stats.todayRevenue.toLocaleString()}
           unit="원"
           icon="💰"
+          color="green"
+        />
+        <StatCard
+          title="금일 입차"
+          value={stats.todayEntries}
+          unit="건"
+          icon="🚙"
+          color="blue"
+        />
+        <StatCard
+          title="금일 출차"
+          value={stats.todayExits}
+          unit="건"
+          icon="🚕"
+          color="yellow"
+        />
+        <StatCard
+          title="평균 주차"
+          value={stats.avgDurationMinutes}
+          unit="분"
+          icon="⏱️"
           color="green"
         />
       </div>

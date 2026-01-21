@@ -16,6 +16,7 @@ import { paymentRoutes } from './routes/payment.js';
 import { ratePlanRoutes } from './routes/rate-plan.js';
 import { discountRoutes } from './routes/discount.js';
 import { membershipRoutes } from './routes/membership.js';
+import { statsRoutes } from './routes/stats.js';
 import { createWsHandler } from './ws/handler.js';
 
 // Validate environment variables
@@ -89,6 +90,7 @@ async function main() {
         { name: 'RatePlan', description: '요금 정책 API' },
         { name: 'Discount', description: '할인 규칙 API' },
         { name: 'Membership', description: '정기권 API' },
+        { name: 'Stats', description: '통계 API' },
       ],
       components: {
         securitySchemes: {
@@ -154,6 +156,7 @@ async function main() {
   app.register(ratePlanRoutes, { prefix: '/api/rate-plans' });
   app.register(discountRoutes, { prefix: '/api/discount-rules' });
   app.register(membershipRoutes, { prefix: '/api/memberships' });
+  app.register(statsRoutes, { prefix: '/api/stats' });
 
   // WebSocket (with JWT authentication)
   const wsHandler = createWsHandler(app);
