@@ -11,7 +11,7 @@ import { broadcast } from '../ws/handler.js';
 
 // ============ 타입 정의 ============
 
-export type DeviceProtocol = 'HTTP' | 'TCP' | 'SERIAL' | 'MODBUS' | 'MOCK';
+export type DeviceProtocol = 'HTTP' | 'TCP' | 'SERIAL' | 'MODBUS' | 'RELAY' | 'MOCK';
 export type DeviceStatus = 'ONLINE' | 'OFFLINE' | 'UNKNOWN' | 'ERROR';
 export type BarrierState = 'OPEN' | 'CLOSED' | 'OPENING' | 'CLOSING' | 'ERROR' | 'UNKNOWN';
 
@@ -163,6 +163,238 @@ export class MockBarrierController implements IBarrierController {
 
   private simulateDelay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
+  }
+}
+
+// ============ 릴레이 컨트롤러 기반 차단기 ============
+
+export interface RelayConfig extends BarrierConfig {
+  relayType: 'USR' | 'SHELLY' | 'ESP32' | 'CUSTOM';
+  channel: number;
+  // CUSTOM 타입용 URL 템플릿
+  openUrl?: string;   // 예: /relay/{channel}/on
+  closeUrl?: string;  // 예: /relay/{channel}/off
+  statusUrl?: string; // 예: /relay/{channel}/status
+}
+
+export class RelayBarrierController implements IBarrierController {
+  private config: RelayConfig;
+  private connected: boolean = false;
+  private state: BarrierState = 'CLOSED';
+  private autoCloseTimer: NodeJS.Timeout | null = null;
+
+  constructor(config: RelayConfig) {
+    this.config = {
+      timeout: 5000,
+      retryCount: 3,
+      retryDelay: 1000,
+      openDuration: 5000,
+      ...config,
+      channel: config.channel ?? 1,
+    };
+    this.checkConnection();
+  }
+
+  /**
+   * 릴레이 타입별 URL 생성
+   */
+  private getUrl(action: 'open' | 'close' | 'status'): string {
+    const base = `http://${this.config.host}:${this.config.port || 80}`;
+    const channel = this.config.channel;
+
+    switch (this.config.relayType) {
+      case 'USR':
+        // USR-R16-T: GET /relay/1/on, /relay/1/off
+        if (action === 'open') return `${base}/relay/${channel}/on`;
+        if (action === 'close') return `${base}/relay/${channel}/off`;
+        return `${base}/relay/${channel}/status`;
+
+      case 'SHELLY':
+        // Shelly: GET /relay/0?turn=on
+        if (action === 'open') return `${base}/relay/${channel - 1}?turn=on`;
+        if (action === 'close') return `${base}/relay/${channel - 1}?turn=off`;
+        return `${base}/relay/${channel - 1}`;
+
+      case 'ESP32':
+        // ESP32 기본: GET /relay?ch=1&action=on
+        if (action === 'open') return `${base}/relay?ch=${channel}&action=on`;
+        if (action === 'close') return `${base}/relay?ch=${channel}&action=off`;
+        return `${base}/relay?ch=${channel}`;
+
+      case 'CUSTOM':
+        // 사용자 정의 URL 템플릿
+        const template = action === 'open'
+          ? this.config.openUrl
+          : action === 'close'
+            ? this.config.closeUrl
+            : this.config.statusUrl;
+        return `${base}${template?.replace('{channel}', String(channel)) || ''}`;
+
+      default:
+        return `${base}/relay/${channel}/${action === 'open' ? 'on' : 'off'}`;
+    }
+  }
+
+  private async checkConnection(): Promise<void> {
+    try {
+      const url = this.getUrl('status');
+      const response = await fetch(url, {
+        method: 'GET',
+        signal: AbortSignal.timeout(this.config.timeout!),
+      });
+      this.connected = response.ok;
+
+      if (response.ok) {
+        try {
+          const data = await response.json();
+          // 릴레이 상태 해석 (제조사별로 다름)
+          if (data.state === 'on' || data.ison === true || data.status === 1) {
+            this.state = 'OPEN';
+          } else {
+            this.state = 'CLOSED';
+          }
+        } catch {
+          // JSON 파싱 실패해도 연결은 성공
+        }
+      }
+    } catch (error) {
+      this.connected = false;
+      console.error(`[RelayBarrier] ${this.config.id} 연결 확인 실패:`, error);
+    }
+  }
+
+  async open(correlationId?: string): Promise<BarrierCommandResult> {
+    const commandId = generateId(ID_PREFIX.BARRIER_CMD);
+
+    for (let attempt = 1; attempt <= (this.config.retryCount || 3); attempt++) {
+      try {
+        const url = this.getUrl('open');
+        console.log(`[RelayBarrier] ${this.config.id} 열림 명령: ${url}`);
+
+        const response = await fetch(url, {
+          method: 'GET',
+          signal: AbortSignal.timeout(this.config.timeout!),
+        });
+
+        if (response.ok) {
+          this.state = 'OPEN';
+          this.connected = true;
+
+          // DB 업데이트
+          const db = getDb();
+          const now = nowIso();
+          db.prepare(`
+            UPDATE barrier_commands
+            SET status = 'EXECUTED', executed_at = ?
+            WHERE correlation_id = ? AND status = 'PENDING'
+          `).run(now, correlationId);
+
+          broadcast({
+            type: 'BARRIER_STATE',
+            data: { deviceId: this.config.id, state: this.state },
+          });
+
+          // 자동 닫힘 타이머 설정
+          this.scheduleAutoClose(correlationId);
+
+          return {
+            success: true,
+            commandId,
+            executedAt: now,
+            state: this.state,
+          };
+        }
+      } catch (error) {
+        console.error(`[RelayBarrier] ${this.config.id} 열림 명령 실패 (시도 ${attempt}):`, error);
+        if (attempt < (this.config.retryCount || 3)) {
+          await new Promise(resolve => setTimeout(resolve, this.config.retryDelay));
+        }
+      }
+    }
+
+    // 실패 처리
+    const db = getDb();
+    const now = nowIso();
+    db.prepare(`
+      UPDATE barrier_commands
+      SET status = 'FAILED', executed_at = ?
+      WHERE correlation_id = ? AND status = 'PENDING'
+    `).run(now, correlationId);
+
+    return {
+      success: false,
+      commandId,
+      error: '릴레이 차단기 열림 명령 실패',
+    };
+  }
+
+  async close(correlationId?: string): Promise<BarrierCommandResult> {
+    const commandId = generateId(ID_PREFIX.BARRIER_CMD);
+
+    // 자동 닫힘 타이머 취소
+    if (this.autoCloseTimer) {
+      clearTimeout(this.autoCloseTimer);
+      this.autoCloseTimer = null;
+    }
+
+    try {
+      const url = this.getUrl('close');
+      console.log(`[RelayBarrier] ${this.config.id} 닫힘 명령: ${url}`);
+
+      const response = await fetch(url, {
+        method: 'GET',
+        signal: AbortSignal.timeout(this.config.timeout!),
+      });
+
+      if (response.ok) {
+        this.state = 'CLOSED';
+        this.connected = true;
+
+        broadcast({
+          type: 'BARRIER_STATE',
+          data: { deviceId: this.config.id, state: this.state },
+        });
+
+        return {
+          success: true,
+          commandId,
+          executedAt: nowIso(),
+          state: this.state,
+        };
+      }
+    } catch (error) {
+      console.error(`[RelayBarrier] ${this.config.id} 닫힘 명령 실패:`, error);
+    }
+
+    return {
+      success: false,
+      commandId,
+      error: '릴레이 차단기 닫힘 명령 실패',
+    };
+  }
+
+  async getState(): Promise<BarrierState> {
+    await this.checkConnection();
+    return this.state;
+  }
+
+  isConnected(): boolean {
+    return this.connected;
+  }
+
+  /**
+   * 자동 닫힘 스케줄링
+   */
+  private scheduleAutoClose(correlationId?: string): void {
+    if (this.autoCloseTimer) {
+      clearTimeout(this.autoCloseTimer);
+    }
+
+    const duration = this.config.openDuration || 5000;
+    this.autoCloseTimer = setTimeout(async () => {
+      console.log(`[RelayBarrier] ${this.config.id} 자동 닫힘 (${duration}ms 후)`);
+      await this.close(correlationId);
+    }, duration);
   }
 }
 
@@ -371,6 +603,9 @@ class HardwareManager {
     switch (config.protocol) {
       case 'HTTP':
         controller = new HttpBarrierController(config);
+        break;
+      case 'RELAY':
+        controller = new RelayBarrierController(config as RelayConfig);
         break;
       case 'MOCK':
       default:
