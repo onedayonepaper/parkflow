@@ -29,7 +29,42 @@ export async function deviceRoutes(app: FastifyInstance) {
       imageUrl?: string;
     };
     Reply: ApiResponse<{ eventId: string; sessionId: string | null }>;
-  }>('/lpr/events', async (request, reply) => {
+  }>('/lpr/events', {
+    schema: {
+      tags: ['Device'],
+      summary: 'LPR 이벤트 수신',
+      description: '차량 번호판 인식 이벤트를 수신합니다. 입차 시 세션 생성, 출차 시 요금 계산을 수행합니다.',
+      body: {
+        type: 'object',
+        required: ['deviceId', 'laneId', 'direction', 'plateNo', 'capturedAt'],
+        properties: {
+          deviceId: { type: 'string', description: 'LPR 디바이스 ID' },
+          laneId: { type: 'string', description: '차로 ID' },
+          direction: { type: 'string', enum: ['ENTRY', 'EXIT'], description: '방향 (입차/출차)' },
+          plateNo: { type: 'string', description: '차량 번호' },
+          capturedAt: { type: 'string', format: 'date-time', description: '촬영 시간' },
+          confidence: { type: 'number', description: '인식 신뢰도 (0~1)' },
+          imageUrl: { type: 'string', description: '이미지 URL' },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                eventId: { type: 'string' },
+                sessionId: { type: 'string', nullable: true },
+              },
+            },
+            error: { type: 'object', nullable: true },
+          },
+        },
+      },
+    },
+  }, async (request, reply) => {
     const parsed = LprEventRequestSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -241,7 +276,13 @@ export async function deviceRoutes(app: FastifyInstance) {
   app.post<{
     Body: { deviceId: string; status: 'ONLINE' | 'OFFLINE' | 'UNKNOWN'; ts: string };
     Reply: ApiResponse<{ received: boolean }>;
-  }>('/heartbeat', async (request, reply) => {
+  }>('/heartbeat', {
+    schema: {
+      tags: ['Device'],
+      summary: '디바이스 Heartbeat',
+      description: '디바이스 상태를 업데이트합니다.',
+    },
+  }, async (request, reply) => {
     const parsed = HeartbeatRequestSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -283,7 +324,13 @@ export async function deviceRoutes(app: FastifyInstance) {
       correlationId?: string;
     };
     Reply: ApiResponse<{ commandId: string }>;
-  }>('/barrier/command', async (request, reply) => {
+  }>('/barrier/command', {
+    schema: {
+      tags: ['Device'],
+      summary: '차단기 명령',
+      description: '차단기를 열거나 닫는 명령을 전송합니다.',
+    },
+  }, async (request, reply) => {
     const parsed = BarrierCommandRequestSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({

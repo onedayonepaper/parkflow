@@ -13,6 +13,43 @@ export async function discountRoutes(app: FastifyInstance) {
   // GET /api/discount-rules
   app.get('/', {
     preHandler: [app.authenticate],
+    schema: {
+      tags: ['Discount'],
+      summary: '할인 규칙 목록 조회',
+      description: '모든 할인 규칙 목록을 조회합니다.',
+      security: [{ bearerAuth: [] }],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                items: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      id: { type: 'string' },
+                      siteId: { type: 'string' },
+                      name: { type: 'string' },
+                      type: { type: 'string', enum: ['AMOUNT', 'PERCENT', 'FREE_MINUTES', 'FREE_ALL'] },
+                      value: { type: 'number' },
+                      isStackable: { type: 'boolean' },
+                      maxApplyCount: { type: 'number', nullable: true },
+                      createdAt: { type: 'string', format: 'date-time' },
+                      updatedAt: { type: 'string', format: 'date-time' },
+                    },
+                  },
+                },
+              },
+            },
+            error: { type: 'object', nullable: true },
+          },
+        },
+      },
+    },
   }, async (request, reply) => {
     const db = getDb();
 
@@ -44,6 +81,16 @@ export async function discountRoutes(app: FastifyInstance) {
     Params: { id: string };
   }>('/:id', {
     preHandler: [app.authenticate],
+    schema: {
+      tags: ['Discount'],
+      summary: '할인 규칙 상세 조회',
+      description: '특정 할인 규칙의 상세 정보를 조회합니다.',
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string', description: '할인 규칙 ID' } },
+      },
+    },
   }, async (request, reply) => {
     const { id } = request.params;
     const db = getDb();
@@ -80,6 +127,23 @@ export async function discountRoutes(app: FastifyInstance) {
     Body: { name: string; type: string; value: number; isStackable?: boolean; maxApplyCount?: number | null };
   }>('/', {
     preHandler: [app.authenticate],
+    schema: {
+      tags: ['Discount'],
+      summary: '할인 규칙 생성',
+      description: '새 할인 규칙을 생성합니다.',
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['name', 'type', 'value'],
+        properties: {
+          name: { type: 'string', description: '할인 규칙 이름' },
+          type: { type: 'string', enum: ['AMOUNT', 'PERCENT', 'FREE_MINUTES', 'FREE_ALL'], description: '할인 유형 (정액, 정률, 무료 시간, 전액 무료)' },
+          value: { type: 'number', description: '할인 값 (금액/퍼센트/분)' },
+          isStackable: { type: 'boolean', description: '중복 적용 가능 여부' },
+          maxApplyCount: { type: 'number', nullable: true, description: '최대 적용 횟수' },
+        },
+      },
+    },
   }, async (request, reply) => {
     const parsed = DiscountRuleRequestSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -113,6 +177,27 @@ export async function discountRoutes(app: FastifyInstance) {
     Body: { name: string; type: string; value: number; isStackable?: boolean; maxApplyCount?: number | null };
   }>('/:id', {
     preHandler: [app.authenticate],
+    schema: {
+      tags: ['Discount'],
+      summary: '할인 규칙 수정',
+      description: '할인 규칙을 수정합니다.',
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string', description: '할인 규칙 ID' } },
+      },
+      body: {
+        type: 'object',
+        required: ['name', 'type', 'value'],
+        properties: {
+          name: { type: 'string', description: '할인 규칙 이름' },
+          type: { type: 'string', enum: ['AMOUNT', 'PERCENT', 'FREE_MINUTES', 'FREE_ALL'], description: '할인 유형' },
+          value: { type: 'number', description: '할인 값' },
+          isStackable: { type: 'boolean', description: '중복 적용 가능 여부' },
+          maxApplyCount: { type: 'number', nullable: true, description: '최대 적용 횟수' },
+        },
+      },
+    },
   }, async (request, reply) => {
     const { id } = request.params;
     const parsed = DiscountRuleRequestSchema.safeParse(request.body);
@@ -154,6 +239,16 @@ export async function discountRoutes(app: FastifyInstance) {
     Params: { id: string };
   }>('/:id', {
     preHandler: [app.authenticate],
+    schema: {
+      tags: ['Discount'],
+      summary: '할인 규칙 삭제',
+      description: '할인 규칙을 삭제합니다.',
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string', description: '할인 규칙 ID' } },
+      },
+    },
   }, async (request, reply) => {
     const { id } = request.params;
     const db = getDb();

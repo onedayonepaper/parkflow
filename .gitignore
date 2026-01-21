@@ -7,6 +7,13 @@ node_modules/
 dist/
 build/
 coverage/
+apps/api-server/data/*.db
+apps/api-server/data/*.db-*
 *.log
 .tmp/
 .cache/
+
+# Playwright
+playwright-report/
+playwright/.cache/
+test-results/

@@ -1,8 +1,12 @@
+import 'dotenv/config';
+import { validateEnv, deviceAgentEnvSchema } from '@parkflow/shared';
 import { LprSimulator } from './lpr-simulator.js';
 import { BarrierListener } from './barrier-listener.js';
 import { EventQueue } from './queue.js';
 
-const API_BASE = process.env.API_BASE || 'http://localhost:3000';
+// Validate environment variables
+const env = validateEnv(deviceAgentEnvSchema);
+const { API_BASE } = env;
 
 async function main() {
   console.log('🚗 ParkFlow Device Agent starting...');

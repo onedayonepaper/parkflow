@@ -16,6 +16,50 @@ export async function membershipRoutes(app: FastifyInstance) {
     Querystring: { plateNo?: string; active?: string };
   }>('/', {
     preHandler: [app.authenticate],
+    schema: {
+      tags: ['Membership'],
+      summary: '정기권 목록 조회',
+      description: '정기권 목록을 조회합니다. 차량번호 검색과 활성 필터를 지원합니다.',
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        properties: {
+          plateNo: { type: 'string', description: '차량번호 (부분 검색)' },
+          active: { type: 'string', enum: ['true', 'false'], description: '활성 정기권만 조회' },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                items: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      id: { type: 'string' },
+                      siteId: { type: 'string' },
+                      plateNo: { type: 'string' },
+                      memberName: { type: 'string', nullable: true },
+                      validFrom: { type: 'string', format: 'date-time' },
+                      validTo: { type: 'string', format: 'date-time' },
+                      note: { type: 'string', nullable: true },
+                      createdAt: { type: 'string', format: 'date-time' },
+                      updatedAt: { type: 'string', format: 'date-time' },
+                    },
+                  },
+                },
+              },
+            },
+            error: { type: 'object', nullable: true },
+          },
+        },
+      },
+    },
   }, async (request, reply) => {
     const { plateNo, active } = request.query;
     const db = getDb();
@@ -62,6 +106,16 @@ export async function membershipRoutes(app: FastifyInstance) {
     Params: { id: string };
   }>('/:id', {
     preHandler: [app.authenticate],
+    schema: {
+      tags: ['Membership'],
+      summary: '정기권 상세 조회',
+      description: '특정 정기권의 상세 정보를 조회합니다.',
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string', description: '정기권 ID' } },
+      },
+    },
   }, async (request, reply) => {
     const { id } = request.params;
     const db = getDb();
@@ -98,6 +152,23 @@ export async function membershipRoutes(app: FastifyInstance) {
     Body: { plateNo: string; memberName?: string; validFrom: string; validTo: string; note?: string };
   }>('/', {
     preHandler: [app.authenticate],
+    schema: {
+      tags: ['Membership'],
+      summary: '정기권 생성',
+      description: '새 정기권을 생성합니다.',
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['plateNo', 'validFrom', 'validTo'],
+        properties: {
+          plateNo: { type: 'string', description: '차량번호' },
+          memberName: { type: 'string', description: '회원 이름' },
+          validFrom: { type: 'string', format: 'date-time', description: '유효 시작일' },
+          validTo: { type: 'string', format: 'date-time', description: '유효 종료일' },
+          note: { type: 'string', description: '메모' },
+        },
+      },
+    },
   }, async (request, reply) => {
     const parsed = MembershipRequestSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -139,6 +210,27 @@ export async function membershipRoutes(app: FastifyInstance) {
     Body: { plateNo: string; memberName?: string; validFrom: string; validTo: string; note?: string };
   }>('/:id', {
     preHandler: [app.authenticate],
+    schema: {
+      tags: ['Membership'],
+      summary: '정기권 수정',
+      description: '정기권을 수정합니다.',
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string', description: '정기권 ID' } },
+      },
+      body: {
+        type: 'object',
+        required: ['plateNo', 'validFrom', 'validTo'],
+        properties: {
+          plateNo: { type: 'string', description: '차량번호' },
+          memberName: { type: 'string', description: '회원 이름' },
+          validFrom: { type: 'string', format: 'date-time', description: '유효 시작일' },
+          validTo: { type: 'string', format: 'date-time', description: '유효 종료일' },
+          note: { type: 'string', description: '메모' },
+        },
+      },
+    },
   }, async (request, reply) => {
     const { id } = request.params;
     const parsed = MembershipRequestSchema.safeParse(request.body);
@@ -188,6 +280,16 @@ export async function membershipRoutes(app: FastifyInstance) {
     Params: { id: string };
   }>('/:id', {
     preHandler: [app.authenticate],
+    schema: {
+      tags: ['Membership'],
+      summary: '정기권 삭제',
+      description: '정기권을 삭제합니다.',
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string', description: '정기권 ID' } },
+      },
+    },
   }, async (request, reply) => {
     const { id } = request.params;
     const db = getDb();
@@ -221,7 +323,33 @@ export async function membershipRoutes(app: FastifyInstance) {
   // GET /api/memberships/check/:plateNo
   app.get<{
     Params: { plateNo: string };
-  }>('/check/:plateNo', async (request, reply) => {
+  }>('/check/:plateNo', {
+    schema: {
+      tags: ['Membership'],
+      summary: '정기권 유효성 확인',
+      description: '차량번호로 정기권 유효성을 확인합니다. 인증 불필요.',
+      params: {
+        type: 'object',
+        properties: { plateNo: { type: 'string', description: '차량번호' } },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                isValid: { type: 'boolean' },
+                membership: { type: 'object', nullable: true },
+              },
+            },
+            error: { type: 'object', nullable: true },
+          },
+        },
+      },
+    },
+  }, async (request, reply) => {
     const { plateNo } = request.params;
     const db = getDb();
     const now = nowIso();

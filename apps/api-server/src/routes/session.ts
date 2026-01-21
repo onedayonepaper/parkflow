@@ -31,6 +31,24 @@ export async function sessionRoutes(app: FastifyInstance) {
     };
   }>('/', {
     preHandler: [app.authenticate],
+    schema: {
+      tags: ['Session'],
+      summary: '세션 목록 조회',
+      description: '주차 세션 목록을 조회합니다. 필터와 페이징을 지원합니다.',
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', enum: ['PARKING', 'EXIT_PENDING', 'PAID', 'CLOSED', 'ERROR'] },
+          plateNo: { type: 'string', description: '차량번호 (부분 검색)' },
+          laneId: { type: 'string' },
+          from: { type: 'string', format: 'date-time' },
+          to: { type: 'string', format: 'date-time' },
+          page: { type: 'string', default: '1' },
+          limit: { type: 'string', default: '20' },
+        },
+      },
+    },
   }, async (request, reply) => {
     const parsed = SessionListFilterSchema.safeParse(request.query);
     if (!parsed.success) {
@@ -123,6 +141,16 @@ export async function sessionRoutes(app: FastifyInstance) {
     Params: { id: string };
   }>('/:id', {
     preHandler: [app.authenticate],
+    schema: {
+      tags: ['Session'],
+      summary: '세션 상세 조회',
+      description: '특정 주차 세션의 상세 정보를 조회합니다. 이벤트, 할인, 결제 내역을 포함합니다.',
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string' } },
+      },
+    },
   }, async (request, reply) => {
     const { id } = request.params;
     const db = getDb();
@@ -199,6 +227,12 @@ export async function sessionRoutes(app: FastifyInstance) {
     Body: { ratePlanId?: string; reason: string };
   }>('/:id/recalc', {
     preHandler: [app.authenticate],
+    schema: {
+      tags: ['Session'],
+      summary: '요금 재계산',
+      description: '세션의 요금을 재계산합니다.',
+      security: [{ bearerAuth: [] }],
+    },
   }, async (request, reply) => {
     const { id } = request.params;
     const parsed = SessionRecalcRequestSchema.safeParse(request.body);
@@ -308,6 +342,12 @@ export async function sessionRoutes(app: FastifyInstance) {
     Body: { plateNoCorrected?: string; entryAt?: string; exitAt?: string; reason: string };
   }>('/:id/correct', {
     preHandler: [app.authenticate],
+    schema: {
+      tags: ['Session'],
+      summary: '세션 정정',
+      description: '세션의 차량번호, 입/출차 시간을 정정합니다.',
+      security: [{ bearerAuth: [] }],
+    },
   }, async (request, reply) => {
     const { id } = request.params;
     const parsed = SessionCorrectRequestSchema.safeParse(request.body);
@@ -374,6 +414,42 @@ export async function sessionRoutes(app: FastifyInstance) {
     Body: { discountRuleId: string; valueOverride?: number | null; reason?: string };
   }>('/:id/apply-discount', {
     preHandler: [app.authenticate],
+    schema: {
+      tags: ['Session'],
+      summary: '할인 적용',
+      description: '세션에 할인을 적용합니다. 할인 총액이 자동으로 재계산됩니다.',
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string', description: '세션 ID' } },
+      },
+      body: {
+        type: 'object',
+        required: ['discountRuleId'],
+        properties: {
+          discountRuleId: { type: 'string', description: '적용할 할인 규칙 ID' },
+          valueOverride: { type: 'number', nullable: true, description: '할인 금액 재정의 (선택)' },
+          reason: { type: 'string', description: '할인 적용 사유' },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                applicationId: { type: 'string' },
+                discountTotal: { type: 'number' },
+                finalFee: { type: 'number' },
+              },
+            },
+            error: { type: 'object', nullable: true },
+          },
+        },
+      },
+    },
   }, async (request, reply) => {
     const { id } = request.params;
     const parsed = ApplyDiscountRequestSchema.safeParse(request.body);
@@ -453,6 +529,39 @@ export async function sessionRoutes(app: FastifyInstance) {
     Body: { reason: string; note?: string };
   }>('/:id/force-close', {
     preHandler: [app.authenticate],
+    schema: {
+      tags: ['Session'],
+      summary: '세션 강제 종료',
+      description: '세션을 강제로 종료합니다. 감사 로그가 기록됩니다.',
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string', description: '세션 ID' } },
+      },
+      body: {
+        type: 'object',
+        required: ['reason'],
+        properties: {
+          reason: { type: 'string', description: '강제 종료 사유' },
+          note: { type: 'string', description: '추가 메모' },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                closed: { type: 'boolean' },
+              },
+            },
+            error: { type: 'object', nullable: true },
+          },
+        },
+      },
+    },
   }, async (request, reply) => {
     const { id } = request.params;
     const parsed = SessionForceCloseRequestSchema.safeParse(request.body);

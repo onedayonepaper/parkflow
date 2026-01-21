@@ -1,10 +1,6 @@
 import { initDb, getDb, closeDb } from './index.js';
 import { generateId, ID_PREFIX, DEFAULT_SITE_ID, nowIso, DEFAULT_RATE_RULES } from '@parkflow/shared';
-import { createHash } from 'crypto';
-
-function hashPassword(password: string): string {
-  return createHash('sha256').update(password).digest('hex');
-}
+import { hashPassword } from '../routes/auth.js';
 
 async function seed() {
   console.log('🌱 Seeding database...');

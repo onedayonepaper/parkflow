@@ -14,6 +14,41 @@ export async function ratePlanRoutes(app: FastifyInstance) {
   // GET /api/rate-plans
   app.get('/', {
     preHandler: [app.authenticate],
+    schema: {
+      tags: ['RatePlan'],
+      summary: '요금제 목록 조회',
+      description: '모든 요금제 목록을 조회합니다.',
+      security: [{ bearerAuth: [] }],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                items: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      id: { type: 'string' },
+                      siteId: { type: 'string' },
+                      name: { type: 'string' },
+                      isActive: { type: 'boolean' },
+                      rules: { type: 'object' },
+                      createdAt: { type: 'string', format: 'date-time' },
+                      updatedAt: { type: 'string', format: 'date-time' },
+                    },
+                  },
+                },
+              },
+            },
+            error: { type: 'object', nullable: true },
+          },
+        },
+      },
+    },
   }, async (request, reply) => {
     const db = getDb();
 
@@ -43,6 +78,16 @@ export async function ratePlanRoutes(app: FastifyInstance) {
     Params: { id: string };
   }>('/:id', {
     preHandler: [app.authenticate],
+    schema: {
+      tags: ['RatePlan'],
+      summary: '요금제 상세 조회',
+      description: '특정 요금제의 상세 정보를 조회합니다.',
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string', description: '요금제 ID' } },
+      },
+    },
   }, async (request, reply) => {
     const { id } = request.params;
     const db = getDb();
@@ -77,6 +122,21 @@ export async function ratePlanRoutes(app: FastifyInstance) {
     Body: { name: string; rules: any; isActive?: boolean };
   }>('/', {
     preHandler: [app.authenticate],
+    schema: {
+      tags: ['RatePlan'],
+      summary: '요금제 생성',
+      description: '새 요금제를 생성합니다. isActive가 true면 기존 활성 요금제는 비활성화됩니다.',
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: 'object',
+        required: ['name', 'rules'],
+        properties: {
+          name: { type: 'string', description: '요금제 이름' },
+          rules: { type: 'object', description: '요금 규칙 (기본료, 추가료 등)' },
+          isActive: { type: 'boolean', description: '활성화 여부' },
+        },
+      },
+    },
   }, async (request, reply) => {
     const parsed = RatePlanRequestSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -122,6 +182,25 @@ export async function ratePlanRoutes(app: FastifyInstance) {
     Body: { name: string; rules: any; isActive?: boolean };
   }>('/:id', {
     preHandler: [app.authenticate],
+    schema: {
+      tags: ['RatePlan'],
+      summary: '요금제 수정',
+      description: '요금제를 수정합니다.',
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string', description: '요금제 ID' } },
+      },
+      body: {
+        type: 'object',
+        required: ['name', 'rules'],
+        properties: {
+          name: { type: 'string', description: '요금제 이름' },
+          rules: { type: 'object', description: '요금 규칙' },
+          isActive: { type: 'boolean', description: '활성화 여부' },
+        },
+      },
+    },
   }, async (request, reply) => {
     const { id } = request.params;
     const parsed = RatePlanRequestSchema.safeParse(request.body);
@@ -175,6 +254,16 @@ export async function ratePlanRoutes(app: FastifyInstance) {
     Params: { id: string };
   }>('/:id/activate', {
     preHandler: [app.authenticate],
+    schema: {
+      tags: ['RatePlan'],
+      summary: '요금제 활성화',
+      description: '특정 요금제를 활성화합니다. 기존 활성 요금제는 비활성화됩니다.',
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string', description: '요금제 ID' } },
+      },
+    },
   }, async (request, reply) => {
     const { id } = request.params;
     const db = getDb();

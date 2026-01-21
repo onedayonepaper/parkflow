@@ -15,16 +15,21 @@ export function getDb(): Database.Database {
   return db;
 }
 
-export function initDb(): Database.Database {
+export function initDb(customPath?: string): Database.Database {
   if (db) return db;
 
-  // Ensure data directory exists
-  const dataDir = dirname(DB_PATH);
-  if (!existsSync(dataDir)) {
-    mkdirSync(dataDir, { recursive: true });
+  const dbPath = customPath || DB_PATH;
+
+  // For in-memory database, skip directory creation
+  if (dbPath !== ':memory:') {
+    // Ensure data directory exists
+    const dataDir = dirname(dbPath);
+    if (!existsSync(dataDir)) {
+      mkdirSync(dataDir, { recursive: true });
+    }
   }
 
-  db = new Database(DB_PATH);
+  db = new Database(dbPath);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
 
@@ -134,6 +139,9 @@ function runMigrations(database: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_sessions_plate_status ON parking_sessions(plate_no, status);
     CREATE INDEX IF NOT EXISTS idx_sessions_entry_at ON parking_sessions(entry_at);
+    CREATE INDEX IF NOT EXISTS idx_sessions_status ON parking_sessions(status);
+    CREATE INDEX IF NOT EXISTS idx_sessions_site ON parking_sessions(site_id);
+    CREATE INDEX IF NOT EXISTS idx_sessions_payment_status ON parking_sessions(payment_status);
 
     -- 7) Discount Rules
     CREATE TABLE IF NOT EXISTS discount_rules (
@@ -179,6 +187,8 @@ function runMigrations(database: Database.Database): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_memberships_plate ON memberships(plate_no);
+    CREATE INDEX IF NOT EXISTS idx_memberships_validity ON memberships(valid_from, valid_to);
+    CREATE INDEX IF NOT EXISTS idx_memberships_site ON memberships(site_id);
 
     -- 10) Payments
     CREATE TABLE IF NOT EXISTS payments (
@@ -196,6 +206,8 @@ function runMigrations(database: Database.Database): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_payments_session ON payments(session_id);
+    CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status);
+    CREATE INDEX IF NOT EXISTS idx_payments_created ON payments(created_at);
 
     -- 11) Users
     CREATE TABLE IF NOT EXISTS users (
@@ -225,6 +237,8 @@ function runMigrations(database: Database.Database): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
+    CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_logs(entity_type, entity_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_id);
 
     -- 13) Barrier Commands
     CREATE TABLE IF NOT EXISTS barrier_commands (

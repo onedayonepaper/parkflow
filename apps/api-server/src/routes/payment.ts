@@ -15,7 +15,39 @@ export async function paymentRoutes(app: FastifyInstance) {
   app.post<{
     Body: { sessionId: string; amount: number; method?: string };
     Reply: ApiResponse<{ paymentId: string; status: string; approvedAt: string }>;
-  }>('/mock/approve', async (request, reply) => {
+  }>('/mock/approve', {
+    schema: {
+      tags: ['Payment'],
+      summary: 'Mock 결제 승인',
+      description: '테스트용 Mock 결제를 승인합니다. 세션 상태가 PAID로 변경됩니다.',
+      body: {
+        type: 'object',
+        required: ['sessionId', 'amount'],
+        properties: {
+          sessionId: { type: 'string', description: '세션 ID' },
+          amount: { type: 'number', description: '결제 금액' },
+          method: { type: 'string', description: '결제 방법', default: 'MOCK' },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                paymentId: { type: 'string' },
+                status: { type: 'string' },
+                approvedAt: { type: 'string', format: 'date-time' },
+              },
+            },
+            error: { type: 'object', nullable: true },
+          },
+        },
+      },
+    },
+  }, async (request, reply) => {
     const parsed = MockPaymentRequestSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -118,6 +150,39 @@ export async function paymentRoutes(app: FastifyInstance) {
     Params: { id: string };
   }>('/:id', {
     preHandler: [app.authenticate],
+    schema: {
+      tags: ['Payment'],
+      summary: '결제 상세 조회',
+      description: '결제 ID로 결제 상세 정보를 조회합니다.',
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: 'object',
+        properties: { id: { type: 'string', description: '결제 ID' } },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                sessionId: { type: 'string' },
+                amount: { type: 'number' },
+                method: { type: 'string' },
+                status: { type: 'string' },
+                pgTxId: { type: 'string' },
+                approvedAt: { type: 'string', format: 'date-time' },
+                createdAt: { type: 'string', format: 'date-time' },
+                updatedAt: { type: 'string', format: 'date-time' },
+              },
+            },
+            error: { type: 'object', nullable: true },
+          },
+        },
+      },
+    },
   }, async (request, reply) => {
     const { id } = request.params;
     const db = getDb();

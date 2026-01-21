@@ -1,10 +1,23 @@
 import type { FastifyInstance } from 'fastify';
 import { getDb } from '../db/index.js';
 import { LoginRequestSchema, type LoginResponse, type ApiResponse } from '@parkflow/shared';
-import { createHash } from 'crypto';
+import bcrypt from 'bcryptjs';
 
-function hashPassword(password: string): string {
-  return createHash('sha256').update(password).digest('hex');
+const BCRYPT_ROUNDS = 12;
+
+export function hashPassword(password: string): string {
+  return bcrypt.hashSync(password, BCRYPT_ROUNDS);
+}
+
+export function verifyPassword(password: string, hash: string): boolean {
+  // Support both bcrypt and legacy SHA256 hashes for migration
+  if (hash.startsWith('$2')) {
+    return bcrypt.compareSync(password, hash);
+  }
+  // Legacy SHA256 fallback (for existing users)
+  const { createHash } = require('crypto');
+  const sha256Hash = createHash('sha256').update(password).digest('hex');
+  return sha256Hash === hash;
 }
 
 export async function authRoutes(app: FastifyInstance) {
@@ -12,7 +25,46 @@ export async function authRoutes(app: FastifyInstance) {
   app.post<{
     Body: { username: string; password: string };
     Reply: ApiResponse<LoginResponse>;
-  }>('/login', async (request, reply) => {
+  }>('/login', {
+    schema: {
+      tags: ['Auth'],
+      summary: '로그인',
+      description: '사용자 인증 후 JWT 토큰을 발급합니다.',
+      body: {
+        type: 'object',
+        required: ['username', 'password'],
+        properties: {
+          username: { type: 'string', description: '사용자 ID' },
+          password: { type: 'string', description: '비밀번호' },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                token: { type: 'string' },
+                user: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string' },
+                    siteId: { type: 'string' },
+                    username: { type: 'string' },
+                    role: { type: 'string' },
+                    isActive: { type: 'boolean' },
+                  },
+                },
+              },
+            },
+            error: { type: 'object', nullable: true },
+          },
+        },
+      },
+    },
+  }, async (request, reply) => {
     const parsed = LoginRequestSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -31,7 +83,7 @@ export async function authRoutes(app: FastifyInstance) {
       WHERE username = ? AND is_active = 1
     `).get(username) as any;
 
-    if (!user || user.password_hash !== hashPassword(password)) {
+    if (!user || !verifyPassword(password, user.password_hash)) {
       return reply.code(401).send({
         ok: false,
         data: null,
@@ -65,6 +117,33 @@ export async function authRoutes(app: FastifyInstance) {
   // GET /api/auth/me
   app.get('/me', {
     preHandler: [app.authenticate],
+    schema: {
+      tags: ['Auth'],
+      summary: '현재 사용자 정보',
+      description: '인증된 사용자의 정보를 반환합니다.',
+      security: [{ bearerAuth: [] }],
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                siteId: { type: 'string' },
+                username: { type: 'string' },
+                role: { type: 'string' },
+                isActive: { type: 'boolean' },
+                createdAt: { type: 'string' },
+                updatedAt: { type: 'string' },
+              },
+            },
+            error: { type: 'object', nullable: true },
+          },
+        },
+      },
+    },
   }, async (request, reply) => {
     const payload = request.user as any;
     const db = getDb();
