@@ -33,6 +33,113 @@ export async function kioskRoutes(app: FastifyInstance) {
     }),
   };
 
+  // GET /api/kiosk/search?digits=1234 - 차량번호 뒷자리 4자리로 검색 (복수 결과 반환)
+  app.get<{
+    Querystring: { digits: string };
+  }>('/search', {
+    preHandler: app.authenticateKiosk,
+    config: { rateLimit: kioskRateLimit },
+    schema: {
+      tags: ['Kiosk'],
+      summary: '차량번호 뒷자리 4자리로 검색',
+      description: '차량번호 뒷자리 4자리로 현재 주차 중인 차량들을 검색합니다.',
+      querystring: {
+        type: 'object',
+        required: ['digits'],
+        properties: {
+          digits: { type: 'string', description: '차량번호 뒷자리 4자리 숫자' },
+        },
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean' },
+            data: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  plateNo: { type: 'string' },
+                  status: { type: 'string' },
+                  entryAt: { type: 'string' },
+                  exitAt: { type: 'string', nullable: true },
+                  rawFee: { type: 'number' },
+                  discountTotal: { type: 'number' },
+                  finalFee: { type: 'number' },
+                  paymentStatus: { type: 'string' },
+                  durationMinutes: { type: 'number' },
+                },
+              },
+            },
+            error: { type: 'object', nullable: true },
+          },
+        },
+      },
+    },
+  }, async (request, reply) => {
+    const { digits } = request.query;
+
+    // 4자리 숫자만 허용
+    if (!digits || !/^\d{4}$/.test(digits)) {
+      return reply.code(400).send({
+        ok: false,
+        data: [],
+        error: { code: 'INVALID_DIGITS', message: '차량번호 뒷자리 4자리 숫자를 입력해주세요.' },
+      });
+    }
+
+    const db = getDb();
+
+    // 뒷자리 4자리가 일치하는 주차 중인 차량 검색
+    const sessions = db.prepare(`
+      SELECT
+        ps.*,
+        COALESCE((SELECT SUM(da.applied_value) FROM discount_applications da WHERE da.session_id = ps.id), 0) as discount_total
+      FROM parking_sessions ps
+      WHERE ps.plate_no LIKE '%' || ?
+        AND ps.status IN ('PARKING', 'EXIT_PENDING', 'PAID')
+        AND ps.site_id = ?
+      ORDER BY ps.entry_at DESC
+      LIMIT 10
+    `).all(digits, DEFAULT_SITE_ID) as any[];
+
+    if (!sessions || sessions.length === 0) {
+      return reply.code(404).send({
+        ok: false,
+        data: [],
+        error: { code: 'SESSION_NOT_FOUND', message: '해당 번호로 주차 중인 차량을 찾을 수 없습니다.' },
+      });
+    }
+
+    // 결과 변환
+    const results = sessions.map((session) => {
+      const entryTime = new Date(session.entry_at).getTime();
+      const exitTime = session.exit_at ? new Date(session.exit_at).getTime() : Date.now();
+      const durationMinutes = Math.floor((exitTime - entryTime) / 1000 / 60);
+
+      return {
+        id: session.id,
+        plateNo: session.plate_no,
+        status: session.status,
+        entryAt: session.entry_at,
+        exitAt: session.exit_at,
+        rawFee: session.raw_fee || 0,
+        discountTotal: session.discount_total || 0,
+        finalFee: session.final_fee || 0,
+        paymentStatus: session.payment_status,
+        durationMinutes,
+      };
+    });
+
+    return reply.send({
+      ok: true,
+      data: results,
+      error: null,
+    });
+  });
+
   // GET /api/kiosk/lookup?plateNo=12가3456
   app.get<{
     Querystring: { plateNo: string };

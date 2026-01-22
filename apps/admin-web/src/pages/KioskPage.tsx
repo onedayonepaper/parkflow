@@ -45,57 +45,63 @@ interface ReceiptData {
 }
 
 const API_BASE = '/api';
+const KIOSK_API_KEY = 'dev-kiosk-key-2024'; // TODO: 환경변수로 이동
 
-// 가상 키보드 컴포넌트 (터치 키오스크용)
-function VirtualKeyboard({
+// 숫자 전용 키패드 컴포넌트 (대형 버튼)
+function NumericKeypad({
   onKeyPress,
   onBackspace,
   onClear,
+  disabled,
 }: {
   onKeyPress: (key: string) => void;
   onBackspace: () => void;
   onClear: () => void;
+  disabled?: boolean;
 }) {
-  const rows = [
-    ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'],
-    ['가', '나', '다', '라', '마', '바', '사', '아', '자', '차'],
-    ['카', '타', '파', '하', '거', '너', '더', '러', '머', '버'],
-    ['서', '어', '저', '허', '고', '노', '도', '로', '모', '보'],
-    ['소', '오', '조', '호', '구', '누', '두', '루', '무', '부'],
+  const keys = [
+    ['1', '2', '3'],
+    ['4', '5', '6'],
+    ['7', '8', '9'],
+    ['C', '0', '←'],
   ];
 
+  const handleKeyPress = (key: string) => {
+    if (disabled) return;
+    if (key === 'C') {
+      onClear();
+    } else if (key === '←') {
+      onBackspace();
+    } else {
+      onKeyPress(key);
+    }
+  };
+
   return (
-    <div className="bg-gray-100 rounded-xl p-3 mt-4">
-      {rows.map((row, rowIndex) => (
-        <div key={rowIndex} className="flex justify-center gap-1 mb-1">
-          {row.map((key) => (
-            <button
-              key={key}
-              onClick={() => onKeyPress(key)}
-              className="w-9 h-12 bg-white rounded-lg text-lg font-bold shadow hover:bg-gray-50 active:bg-gray-200 transition-colors"
-            >
-              {key}
-            </button>
-          ))}
-        </div>
+    <div className="grid grid-cols-3 gap-3 p-4">
+      {keys.flat().map((key) => (
+        <button
+          key={key}
+          onClick={() => handleKeyPress(key)}
+          disabled={disabled}
+          className={`
+            h-20 text-3xl font-bold rounded-2xl transition-all duration-150
+            active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed
+            ${key === 'C'
+              ? 'bg-red-100 text-red-600 hover:bg-red-200 active:bg-red-300'
+              : key === '←'
+                ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200 active:bg-yellow-300'
+                : 'bg-white text-gray-800 hover:bg-gray-50 active:bg-gray-100 shadow-md'
+            }
+          `}
+        >
+          {key === '←' ? (
+            <svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414 6.414a2 2 0 001.414.586H19a2 2 0 002-2V7a2 2 0 00-2-2h-8.172a2 2 0 00-1.414.586L3 12z" />
+            </svg>
+          ) : key}
+        </button>
       ))}
-      <div className="flex justify-center gap-2 mt-2">
-        <button
-          onClick={onClear}
-          className="px-6 py-3 bg-red-100 text-red-600 rounded-lg font-bold hover:bg-red-200 transition-colors"
-        >
-          전체삭제
-        </button>
-        <button
-          onClick={onBackspace}
-          className="px-6 py-3 bg-yellow-100 text-yellow-700 rounded-lg font-bold hover:bg-yellow-200 transition-colors flex items-center gap-1"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414 6.414a2 2 0 001.414.586H19a2 2 0 002-2V7a2 2 0 00-2-2h-8.172a2 2 0 00-1.414.586L3 12z" />
-          </svg>
-          삭제
-        </button>
-      </div>
     </div>
   );
 }
@@ -424,15 +430,15 @@ function Receipt({ data, onClose }: { data: ReceiptData; onClose: () => void }) 
 }
 
 export default function KioskPage() {
-  const [plateNo, setPlateNo] = useState('');
+  const [digits, setDigits] = useState('');
   const [loading, setLoading] = useState(false);
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [error, setError] = useState('');
   const [paymentSuccess, setPaymentSuccess] = useState(false);
-  const [step, setStep] = useState<'input' | 'confirm' | 'payment-select' | 'complete'>('input');
+  const [step, setStep] = useState<'input' | 'select' | 'confirm' | 'payment-select' | 'complete'>('input');
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   const [showReceipt, setShowReceipt] = useState(false);
-  const [showKeyboard, setShowKeyboard] = useState(true);
   const [tossClientKey, setTossClientKey] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'mock' | 'toss'>('mock');
 
@@ -460,45 +466,69 @@ export default function KioskPage() {
     loadTossClientKey();
   }, []);
 
-  // 가상 키보드 핸들러
-  const handleKeyPress = (key: string) => {
-    setPlateNo((prev) => prev + key);
-  };
-
-  const handleBackspace = () => {
-    setPlateNo((prev) => prev.slice(0, -1));
-  };
-
-  const handleClear = () => {
-    setPlateNo('');
-  };
-
-  const searchSession = async () => {
-    if (!plateNo.trim()) {
-      setError('차량번호를 입력해주세요.');
-      return;
-    }
+  // 4자리 입력 시 자동 검색
+  const searchByDigits = async (searchDigits: string) => {
+    if (searchDigits.length !== 4) return;
 
     setLoading(true);
     setError('');
+    setSessions([]);
     setSession(null);
     setPaymentSuccess(false);
 
     try {
-      const response = await fetch(`${API_BASE}/kiosk/lookup?plateNo=${encodeURIComponent(plateNo.trim())}`);
+      const response = await fetch(`${API_BASE}/kiosk/search?digits=${searchDigits}`, {
+        headers: { 'x-kiosk-api-key': KIOSK_API_KEY },
+      });
       const result = await response.json();
 
-      if (result.ok && result.data) {
-        setSession(result.data);
-        setStep('confirm');
+      if (result.ok && result.data && result.data.length > 0) {
+        if (result.data.length === 1) {
+          // 단일 결과: 바로 확인 화면으로
+          setSession(result.data[0]);
+          setStep('confirm');
+        } else {
+          // 복수 결과: 선택 화면으로
+          setSessions(result.data);
+          setStep('select');
+        }
       } else {
-        setError(result.error?.message || '세션을 찾을 수 없습니다.');
+        setError(result.error?.message || '해당 번호로 주차 중인 차량을 찾을 수 없습니다.');
       }
     } catch {
       setError('서버 연결에 실패했습니다.');
     } finally {
       setLoading(false);
     }
+  };
+
+  // 숫자 키패드 핸들러
+  const handleKeyPress = (key: string) => {
+    if (digits.length >= 4) return;
+    const newDigits = digits + key;
+    setDigits(newDigits);
+    setError('');
+
+    // 4자리 입력 시 자동 검색
+    if (newDigits.length === 4) {
+      searchByDigits(newDigits);
+    }
+  };
+
+  const handleBackspace = () => {
+    setDigits((prev) => prev.slice(0, -1));
+    setError('');
+  };
+
+  const handleClear = () => {
+    setDigits('');
+    setError('');
+  };
+
+  // 차량 선택
+  const selectSession = (selectedSession: SessionInfo) => {
+    setSession(selectedSession);
+    setStep('confirm');
   };
 
   // 결제 수단 선택으로 이동
@@ -516,7 +546,10 @@ export default function KioskPage() {
     try {
       const response = await fetch(`${API_BASE}/kiosk/pay`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-kiosk-api-key': KIOSK_API_KEY,
+        },
         body: JSON.stringify({
           sessionId: session.id,
           amount: session.finalFee,
@@ -594,7 +627,8 @@ export default function KioskPage() {
   };
 
   const reset = () => {
-    setPlateNo('');
+    setDigits('');
+    setSessions([]);
     setSession(null);
     setError('');
     setPaymentSuccess(false);
@@ -632,58 +666,111 @@ export default function KioskPage() {
 
         {/* Main Card */}
         <div className="bg-white rounded-2xl shadow-2xl overflow-hidden">
-          {/* Step: Input */}
+          {/* Step: Input - 숫자 4자리 입력 */}
           {step === 'input' && (
             <div className="p-6">
-              <h2 className="text-2xl font-bold text-gray-800 text-center mb-4">
-                차량번호 입력
+              <h2 className="text-2xl font-bold text-gray-800 text-center mb-2">
+                차량번호 뒷자리 입력
               </h2>
+              <p className="text-gray-500 text-center mb-6">
+                차량번호 뒷 4자리를 입력하세요
+              </p>
 
-              <div className="mb-4">
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={plateNo}
-                    onChange={(e) => setPlateNo(e.target.value.toUpperCase())}
-                    onKeyDown={(e) => e.key === 'Enter' && searchSession()}
-                    onFocus={() => setShowKeyboard(true)}
-                    placeholder="예: 12가3456"
-                    className="w-full text-center text-3xl font-bold py-4 px-6 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none"
-                    readOnly={showKeyboard}
-                  />
-                  <button
-                    onClick={() => setShowKeyboard(!showKeyboard)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-gray-600"
-                    title={showKeyboard ? '키보드 숨기기' : '키보드 보이기'}
+              {/* 4자리 디스플레이 */}
+              <div className="flex justify-center gap-3 mb-4">
+                {[0, 1, 2, 3].map((index) => (
+                  <div
+                    key={index}
+                    className={`
+                      w-16 h-20 flex items-center justify-center text-4xl font-bold rounded-xl border-3
+                      transition-all duration-200
+                      ${digits[index]
+                        ? 'bg-blue-50 border-blue-500 text-blue-700'
+                        : 'bg-gray-50 border-gray-300 text-gray-300'
+                      }
+                      ${index === digits.length && !loading ? 'border-blue-400 animate-pulse' : ''}
+                    `}
                   >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17H5a2 2 0 01-2-2V7a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-4m-5 0v4m0-4h4m-2-4h.01" />
-                    </svg>
-                  </button>
-                </div>
+                    {digits[index] || '_'}
+                  </div>
+                ))}
               </div>
 
-              {/* 가상 키보드 */}
-              {showKeyboard && (
-                <VirtualKeyboard
-                  onKeyPress={handleKeyPress}
-                  onBackspace={handleBackspace}
-                  onClear={handleClear}
-                />
+              {/* 로딩 표시 */}
+              {loading && (
+                <div className="text-center py-4">
+                  <div className="inline-flex items-center gap-2 text-blue-600">
+                    <svg className="animate-spin w-6 h-6" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    <span className="text-lg font-medium">차량 검색 중...</span>
+                  </div>
+                </div>
               )}
 
               {error && (
                 <div className="my-4 p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-center">
                   {error}
+                  <button
+                    onClick={handleClear}
+                    className="block mx-auto mt-2 text-sm text-red-500 underline"
+                  >
+                    다시 입력하기
+                  </button>
                 </div>
               )}
 
+              {/* 숫자 키패드 */}
+              <NumericKeypad
+                onKeyPress={handleKeyPress}
+                onBackspace={handleBackspace}
+                onClear={handleClear}
+                disabled={loading}
+              />
+
+              <p className="text-center text-gray-400 text-sm mt-4">
+                예: 차량번호가 12가<strong className="text-blue-600">3456</strong>인 경우 → <strong className="text-blue-600">3456</strong> 입력
+              </p>
+            </div>
+          )}
+
+          {/* Step: Select - 복수 차량 선택 */}
+          {step === 'select' && sessions.length > 0 && (
+            <div className="p-6">
+              <h2 className="text-2xl font-bold text-gray-800 text-center mb-2">
+                차량 선택
+              </h2>
+              <p className="text-gray-500 text-center mb-6">
+                {sessions.length}대의 차량이 검색되었습니다
+              </p>
+
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {sessions.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => selectSession(s)}
+                    className="w-full p-4 bg-gray-50 hover:bg-blue-50 border-2 border-gray-200 hover:border-blue-400 rounded-xl text-left transition-all"
+                  >
+                    <div className="flex justify-between items-center">
+                      <span className="text-2xl font-bold text-gray-800">{s.plateNo}</span>
+                      <span className="text-xl font-bold text-blue-600">
+                        {s.finalFee.toLocaleString()}원
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center mt-2 text-sm text-gray-500">
+                      <span>입차: {formatTime(s.entryAt)}</span>
+                      <span>{formatDuration(s.durationMinutes)}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
               <button
-                onClick={searchSession}
-                disabled={loading || !plateNo.trim()}
-                className="w-full py-4 mt-4 bg-blue-600 text-white text-xl font-bold rounded-xl hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
+                onClick={reset}
+                className="w-full py-4 mt-4 bg-gray-200 text-gray-700 text-lg font-bold rounded-xl hover:bg-gray-300 transition-colors"
               >
-                {loading ? '조회 중...' : '요금 조회'}
+                처음으로
               </button>
             </div>
           )}
