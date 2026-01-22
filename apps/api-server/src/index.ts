@@ -4,6 +4,7 @@ import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
 import websocket from '@fastify/websocket';
 import rateLimit from '@fastify/rate-limit';
+import helmet from '@fastify/helmet';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 
@@ -30,11 +31,22 @@ import { whitelistRoutes } from './routes/whitelist.js';
 import { simulationRoutes } from './routes/simulation.js';
 import { createWsHandler } from './ws/handler.js';
 import { initializeHardware, shutdownHardware } from './services/hardware.js';
+import { initializeLpr, shutdownLpr } from './services/lpr.js';
+import { initializeBackup, shutdownBackup } from './services/backup.js';
+import { backupRoutes } from './routes/backup.js';
+import { metricsRoutes } from './routes/metrics.js';
+import { webhookRoutes } from './routes/webhook.js';
+import { recordHttpMetric } from './services/metrics.js';
 
 // Validate environment variables
 const env = validateEnv(apiServerEnvSchema);
 
-const { PORT, HOST, JWT_SECRET, LOG_LEVEL, NODE_ENV, CORS_ORIGIN, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } = env;
+const {
+  PORT, HOST, JWT_SECRET, LOG_LEVEL, NODE_ENV, CORS_ORIGIN,
+  RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS,
+  DEVICE_API_KEY, KIOSK_API_KEY, REQUEST_BODY_LIMIT, KIOSK_RATE_LIMIT,
+  BACKUP_ENABLED, BACKUP_DIR, BACKUP_SCHEDULE, BACKUP_RETENTION_DAYS, BACKUP_MAX_FILES, BACKUP_COMPRESS,
+} = env;
 
 // Parse CORS origins
 function parseCorsOrigins(corsOrigin: string): string[] | boolean {
@@ -52,6 +64,19 @@ async function main() {
   // Initialize hardware manager
   await initializeHardware();
 
+  // Initialize LPR camera connections
+  await initializeLpr();
+
+  // Initialize backup service
+  initializeBackup({
+    enabled: BACKUP_ENABLED,
+    backupDir: BACKUP_DIR,
+    schedule: BACKUP_SCHEDULE,
+    retentionDays: BACKUP_RETENTION_DAYS,
+    maxFiles: BACKUP_MAX_FILES,
+    compress: BACKUP_COMPRESS,
+  });
+
   const app = Fastify({
     logger: {
       level: LOG_LEVEL,
@@ -59,6 +84,10 @@ async function main() {
         ? { target: 'pino-pretty', options: { colorize: true } }
         : undefined,
     },
+    // 요청 본문 크기 제한 (기본 1MB)
+    bodyLimit: REQUEST_BODY_LIMIT,
+    // Request ID 생성 (트레이싱용)
+    genReqId: () => `req_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 9)}`,
   });
 
   // Plugins
@@ -67,6 +96,39 @@ async function main() {
     origin: corsOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  });
+
+  // 보안 헤더 설정 (Helmet)
+  await app.register(helmet, {
+    // CSP (Content Security Policy)
+    contentSecurityPolicy: NODE_ENV === 'production' ? {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
+        imgSrc: ["'self'", 'data:', 'blob:'],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+      },
+    } : false, // 개발 환경에서는 CSP 비활성화 (Swagger UI 등)
+    // HSTS (HTTP Strict Transport Security)
+    hsts: NODE_ENV === 'production' ? {
+      maxAge: 31536000, // 1년
+      includeSubDomains: true,
+      preload: true,
+    } : false,
+    // X-Frame-Options
+    frameguard: { action: 'deny' },
+    // X-Content-Type-Options
+    noSniff: true,
+    // X-XSS-Protection (레거시 브라우저용)
+    xssFilter: true,
+    // Referrer-Policy
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    // X-Permitted-Cross-Domain-Policies
+    permittedCrossDomainPolicies: { permittedPolicies: 'none' },
   });
 
   await app.register(jwt, { secret: JWT_SECRET });
@@ -225,13 +287,107 @@ ParkFlow는 LPR(번호판 인식) 기반 주차장 관리 시스템입니다.
     },
   });
 
-  // Auth decorator
+  // Auth decorator (JWT 인증)
   app.decorate('authenticate', async function (request: any, reply: any) {
     try {
       await request.jwtVerify();
     } catch (err) {
       reply.code(401).send({ ok: false, data: null, error: { code: 'UNAUTHORIZED', message: 'Invalid token' } });
     }
+  });
+
+  // Device API Key 인증 데코레이터 (LPR, 차단기 등 하드웨어용)
+  app.decorate('authenticateDevice', async function (request: any, reply: any) {
+    const apiKey = request.headers['x-device-api-key'] || request.headers['x-api-key'];
+
+    // 프로덕션 환경에서는 반드시 API 키 필요
+    if (NODE_ENV === 'production') {
+      if (!DEVICE_API_KEY) {
+        app.log.error('DEVICE_API_KEY is not configured in production');
+        return reply.code(500).send({
+          ok: false,
+          data: null,
+          error: { code: 'CONFIG_ERROR', message: 'Server configuration error' },
+        });
+      }
+
+      if (!apiKey || apiKey !== DEVICE_API_KEY) {
+        app.log.warn({ ip: request.ip }, 'Invalid device API key attempt');
+        return reply.code(401).send({
+          ok: false,
+          data: null,
+          error: { code: 'INVALID_API_KEY', message: 'Invalid or missing device API key' },
+        });
+      }
+      return;
+    }
+
+    // 개발/테스트 환경: API 키가 설정된 경우에만 검증
+    if (DEVICE_API_KEY && apiKey !== DEVICE_API_KEY) {
+      app.log.warn({ ip: request.ip }, 'Invalid device API key attempt (dev mode)');
+      return reply.code(401).send({
+        ok: false,
+        data: null,
+        error: { code: 'INVALID_API_KEY', message: 'Invalid or missing device API key' },
+      });
+    }
+  });
+
+  // Kiosk API Key 인증 데코레이터 (무인 결제 키오스크용)
+  app.decorate('authenticateKiosk', async function (request: any, reply: any) {
+    const apiKey = request.headers['x-kiosk-api-key'] || request.headers['x-api-key'];
+
+    // 프로덕션 환경에서는 반드시 API 키 필요
+    if (NODE_ENV === 'production') {
+      if (!KIOSK_API_KEY) {
+        app.log.error('KIOSK_API_KEY is not configured in production');
+        return reply.code(500).send({
+          ok: false,
+          data: null,
+          error: { code: 'CONFIG_ERROR', message: 'Server configuration error' },
+        });
+      }
+
+      if (!apiKey || apiKey !== KIOSK_API_KEY) {
+        app.log.warn({ ip: request.ip }, 'Invalid kiosk API key attempt');
+        return reply.code(401).send({
+          ok: false,
+          data: null,
+          error: { code: 'INVALID_API_KEY', message: 'Invalid or missing kiosk API key' },
+        });
+      }
+      return;
+    }
+
+    // 개발/테스트 환경: API 키가 설정된 경우에만 검증
+    if (KIOSK_API_KEY && apiKey !== KIOSK_API_KEY) {
+      app.log.warn({ ip: request.ip }, 'Invalid kiosk API key attempt (dev mode)');
+      return reply.code(401).send({
+        ok: false,
+        data: null,
+        error: { code: 'INVALID_API_KEY', message: 'Invalid or missing kiosk API key' },
+      });
+    }
+  });
+
+  // ========================================================================
+  // Metrics Collection Hook
+  // ========================================================================
+  app.addHook('onResponse', (request, reply, done) => {
+    // /metrics와 /health 요청은 제외 (노이즈 방지)
+    const url = request.url;
+    if (url.startsWith('/metrics') || url === '/health' || url === '/api/health') {
+      return done();
+    }
+
+    const duration = reply.elapsedTime; // Fastify 내장 응답 시간 (ms)
+    recordHttpMetric(
+      request.method,
+      url,
+      reply.statusCode,
+      duration
+    );
+    done();
   });
 
   // Health check - enhanced
@@ -317,6 +473,9 @@ ParkFlow는 LPR(번호판 인식) 기반 주차장 관리 시스템입니다.
   app.register(deviceManagementRoutes, { prefix: '/api/devices' });
   app.register(whitelistRoutes, { prefix: '/api/whitelist' });
   app.register(simulationRoutes, { prefix: '/api/simulation' });
+  app.register(backupRoutes, { prefix: '/api/backups' });
+  app.register(metricsRoutes, { prefix: '/metrics' });
+  app.register(webhookRoutes, { prefix: '/api/webhooks' });
 
   // WebSocket (with JWT authentication)
   const wsHandler = createWsHandler(app);
@@ -359,6 +518,14 @@ ParkFlow는 LPR(번호판 인식) 기반 주차장 관리 시스템입니다.
       // Close hardware connections
       shutdownHardware();
       console.log('✅ Hardware connections closed');
+
+      // Close LPR camera connections
+      shutdownLpr();
+      console.log('✅ LPR camera connections closed');
+
+      // Stop backup service
+      shutdownBackup();
+      console.log('✅ Backup service stopped');
 
       // Close database connection
       const { closeDb } = await import('./db/index.js');

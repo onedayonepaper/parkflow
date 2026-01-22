@@ -1,0 +1,40 @@
+# ============================================================================
+# Prometheus Configuration
+# ============================================================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'parkflow'
+
+# Alertmanager 설정
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+
+# 알림 규칙 파일
+rule_files:
+  - '/etc/prometheus/alerts/*.yml'
+
+# 스크래핑 대상
+scrape_configs:
+  # Prometheus 자체 메트릭
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # ParkFlow API Server
+  - job_name: 'parkflow-api'
+    static_configs:
+      - targets: ['api-server:3000']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # Node Exporter (호스트 메트릭 - 선택사항)
+  # - job_name: 'node'
+  #   static_configs:
+  #     - targets: ['node-exporter:9100']

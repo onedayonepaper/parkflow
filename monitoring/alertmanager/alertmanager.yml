@@ -1,0 +1,145 @@
+# ============================================================================
+# Alertmanager Configuration
+# ============================================================================
+# 알림 관리 및 라우팅 설정
+#
+# 환경변수 설정 필요:
+#   - SLACK_WEBHOOK_URL: Slack 웹훅 URL
+#   - SMTP_HOST: SMTP 서버 호스트
+#   - SMTP_FROM: 발신 이메일 주소
+#   - SMTP_AUTH_USERNAME: SMTP 인증 사용자명
+#   - SMTP_AUTH_PASSWORD: SMTP 인증 비밀번호
+#   - ALERT_EMAIL_TO: 알림 수신 이메일 주소
+# ============================================================================
+
+global:
+  # 알림 해제까지 대기 시간
+  resolve_timeout: 5m
+
+  # Slack 설정 (환경변수로 설정)
+  # slack_api_url: '${SLACK_WEBHOOK_URL}'
+
+  # SMTP 설정 (이메일 알림용)
+  # smtp_smarthost: '${SMTP_HOST}:587'
+  # smtp_from: '${SMTP_FROM}'
+  # smtp_auth_username: '${SMTP_AUTH_USERNAME}'
+  # smtp_auth_password: '${SMTP_AUTH_PASSWORD}'
+  # smtp_require_tls: true
+
+# 알림 템플릿
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# 알림 라우팅 규칙
+route:
+  # 기본 수신자
+  receiver: 'default-receiver'
+
+  # 그룹화 설정 - 같은 그룹의 알림은 함께 전송
+  group_by: ['alertname', 'severity']
+
+  # 첫 번째 알림 전송 대기 시간
+  group_wait: 30s
+
+  # 그룹 알림 재전송 간격
+  group_interval: 5m
+
+  # 반복 알림 간격
+  repeat_interval: 4h
+
+  # 하위 라우트 (심각도별 분류)
+  routes:
+    # Critical 알림 - 즉시 전송
+    - receiver: 'critical-receiver'
+      match:
+        severity: critical
+      group_wait: 10s
+      repeat_interval: 1h
+      continue: true
+
+    # Warning 알림
+    - receiver: 'warning-receiver'
+      match:
+        severity: warning
+      repeat_interval: 4h
+
+    # Info 알림 - 업무 시간에만
+    - receiver: 'info-receiver'
+      match:
+        severity: info
+      mute_time_intervals:
+        - outside-business-hours
+      repeat_interval: 24h
+
+# 알림 억제 규칙
+inhibit_rules:
+  # Critical 알림이 있으면 같은 alertname의 Warning 억제
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname']
+
+  # ApiServerDown이 있으면 다른 모든 알림 억제 (서버가 죽으면 다른 알림은 무의미)
+  - source_match:
+      alertname: 'ApiServerDown'
+    target_match_re:
+      alertname: '.*'
+    equal: ['instance']
+
+# 알림 수신자 정의
+receivers:
+  # 기본 수신자 (웹훅)
+  - name: 'default-receiver'
+    webhook_configs:
+      - url: 'http://api-server:3000/api/webhooks/alert'
+        send_resolved: true
+
+  # Critical 알림 수신자
+  - name: 'critical-receiver'
+    webhook_configs:
+      - url: 'http://api-server:3000/api/webhooks/alert'
+        send_resolved: true
+    # Slack 알림 (설정 필요)
+    # slack_configs:
+    #   - channel: '#parkflow-alerts'
+    #     send_resolved: true
+    #     title: |-
+    #       [{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}
+    #     text: >-
+    #       {{ range .Alerts }}
+    #       *Severity:* `{{ .Labels.severity }}`
+    #       *Description:* {{ .Annotations.description }}
+    #       {{ end }}
+    # 이메일 알림 (설정 필요)
+    # email_configs:
+    #   - to: '${ALERT_EMAIL_TO}'
+    #     send_resolved: true
+    #     headers:
+    #       Subject: '[CRITICAL] ParkFlow Alert: {{ .CommonLabels.alertname }}'
+
+  # Warning 알림 수신자
+  - name: 'warning-receiver'
+    webhook_configs:
+      - url: 'http://api-server:3000/api/webhooks/alert'
+        send_resolved: true
+
+  # Info 알림 수신자
+  - name: 'info-receiver'
+    webhook_configs:
+      - url: 'http://api-server:3000/api/webhooks/alert'
+        send_resolved: true
+
+# 알림 억제 시간대 정의
+time_intervals:
+  - name: outside-business-hours
+    time_intervals:
+      # 평일 야간 (18:00 ~ 09:00)
+      - times:
+          - start_time: '18:00'
+            end_time: '24:00'
+          - start_time: '00:00'
+            end_time: '09:00'
+        weekdays: ['monday:friday']
+      # 주말 전체
+      - weekdays: ['saturday', 'sunday']

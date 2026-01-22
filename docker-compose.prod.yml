@@ -1,0 +1,146 @@
+# ============================================================================
+# ParkFlow Production Docker Compose
+# ============================================================================
+# Usage:
+#   docker-compose -f docker-compose.prod.yml up -d
+#
+# Required environment variables (create .env file):
+#   - JWT_SECRET: JWT 인증 시크릿 (32자 이상)
+#   - DEVICE_API_KEY: 디바이스 API 키 (16자 이상)
+#   - KIOSK_API_KEY: 키오스크 API 키 (16자 이상)
+#   - CORS_ORIGIN: 허용할 CORS 출처
+#
+# Optional:
+#   - TOSS_SECRET_KEY: 토스페이먼츠 시크릿 키
+#   - TOSS_CLIENT_KEY: 토스페이먼츠 클라이언트 키
+# ============================================================================
+
+version: '3.8'
+
+services:
+  # ==========================================================================
+  # API Server
+  # ==========================================================================
+  api-server:
+    build:
+      context: .
+      dockerfile: apps/api-server/Dockerfile
+    container_name: parkflow-api
+    environment:
+      - NODE_ENV=production
+      - HOST=0.0.0.0
+      - PORT=3000
+      # Security (Required)
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
+      - DEVICE_API_KEY=${DEVICE_API_KEY:-}
+      - KIOSK_API_KEY=${KIOSK_API_KEY:-}
+      # Server Configuration
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - CORS_ORIGIN=${CORS_ORIGIN:-https://admin.parkflow.io}
+      - RATE_LIMIT_MAX=${RATE_LIMIT_MAX:-100}
+      - RATE_LIMIT_WINDOW_MS=${RATE_LIMIT_WINDOW_MS:-60000}
+      - REQUEST_BODY_LIMIT=${REQUEST_BODY_LIMIT:-1048576}
+      - KIOSK_RATE_LIMIT=${KIOSK_RATE_LIMIT:-30}
+      # TossPayments (Optional)
+      - PAYMENT_MODE=${PAYMENT_MODE:-mock}
+      - TOSS_SECRET_KEY=${TOSS_SECRET_KEY:-}
+      - TOSS_CLIENT_KEY=${TOSS_CLIENT_KEY:-}
+      - TOSS_WEBHOOK_SECRET=${TOSS_WEBHOOK_SECRET:-}
+      # Notification (Optional)
+      - NOTIFICATION_MODE=${NOTIFICATION_MODE:-mock}
+      - EMAIL_PROVIDER=${EMAIL_PROVIDER:-smtp}
+      - SMS_PROVIDER=${SMS_PROVIDER:-nhn}
+      # Backup Configuration
+      - BACKUP_ENABLED=${BACKUP_ENABLED:-true}
+      - BACKUP_DIR=/app/data/backups
+      - BACKUP_SCHEDULE=${BACKUP_SCHEDULE:-0 3 * * *}
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-30}
+      - BACKUP_MAX_FILES=${BACKUP_MAX_FILES:-100}
+      - BACKUP_COMPRESS=${BACKUP_COMPRESS:-true}
+    volumes:
+      # Persistent data (database + backups)
+      - parkflow-data:/app/apps/api-server/data
+      # Backup files (separate volume for easy backup extraction)
+      - parkflow-backups:/app/data/backups
+      # Logs (optional - for log aggregation)
+      - parkflow-logs:/app/logs
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # ==========================================================================
+  # Admin Web (Nginx)
+  # ==========================================================================
+  admin-web:
+    build:
+      context: .
+      dockerfile: apps/admin-web/Dockerfile
+    container_name: parkflow-admin
+    ports:
+      - "80:80"
+    depends_on:
+      api-server:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 64M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ============================================================================
+# Volumes
+# ============================================================================
+volumes:
+  # Main data volume (SQLite database)
+  parkflow-data:
+    driver: local
+
+  # Backup files (can be mounted to external storage)
+  parkflow-backups:
+    driver: local
+
+  # Application logs
+  parkflow-logs:
+    driver: local
+
+# ============================================================================
+# Networks
+# ============================================================================
+networks:
+  default:
+    name: parkflow-network
+    driver: bridge

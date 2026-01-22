@@ -18,3 +18,7 @@ playwright-report/
 playwright/.cache/
 test-results/
 .playwright-mcp/
+
+# SSL/TLS Certificates
+certbot/
+*.db.gz

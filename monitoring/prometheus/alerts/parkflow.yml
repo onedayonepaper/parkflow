@@ -1,0 +1,148 @@
+# ============================================================================
+# ParkFlow Alerting Rules
+# ============================================================================
+
+groups:
+  # ==========================================================================
+  # API Server 가용성 알림
+  # ==========================================================================
+  - name: parkflow_availability
+    rules:
+      # API 서버 다운
+      - alert: ApiServerDown
+        expr: up{job="parkflow-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ParkFlow API 서버 다운"
+          description: "API 서버가 1분 이상 응답하지 않습니다."
+
+      # 높은 에러율
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "높은 에러율 감지"
+          description: "5xx 에러율이 5% 이상입니다. 현재: {{ $value | printf \"%.2f\" }}%"
+
+      # 매우 높은 에러율
+      - alert: CriticalErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total[5m]))
+          ) > 0.10
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "심각한 에러율"
+          description: "5xx 에러율이 10% 이상입니다. 즉각적인 조치가 필요합니다."
+
+  # ==========================================================================
+  # 성능 알림
+  # ==========================================================================
+  - name: parkflow_performance
+    rules:
+      # 느린 응답 시간
+      - alert: SlowResponseTime
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "느린 API 응답 시간"
+          description: "95 퍼센타일 응답 시간이 1초를 초과합니다."
+
+      # 매우 느린 응답 시간
+      - alert: VerySlowResponseTime
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 3
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "심각하게 느린 응답 시간"
+          description: "95 퍼센타일 응답 시간이 3초를 초과합니다."
+
+  # ==========================================================================
+  # 리소스 알림
+  # ==========================================================================
+  - name: parkflow_resources
+    rules:
+      # 높은 메모리 사용량
+      - alert: HighMemoryUsage
+        expr: |
+          (process_heap_bytes{type="used"} / process_heap_bytes{type="total"}) > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "높은 힙 메모리 사용량"
+          description: "힙 메모리 사용량이 85%를 초과했습니다."
+
+      # 심각한 메모리 사용량
+      - alert: CriticalMemoryUsage
+        expr: |
+          (process_heap_bytes{type="used"} / process_heap_bytes{type="total"}) > 0.95
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "심각한 힙 메모리 사용량"
+          description: "힙 메모리 사용량이 95%를 초과했습니다. OOM 위험!"
+
+  # ==========================================================================
+  # 비즈니스 메트릭 알림
+  # ==========================================================================
+  - name: parkflow_business
+    rules:
+      # 결제 실패율 증가
+      - alert: HighPaymentFailureRate
+        expr: |
+          (
+            parkflow_payments_total{status="FAILED"}
+            /
+            (parkflow_payments_total{status="APPROVED"} + parkflow_payments_total{status="FAILED"})
+          ) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "결제 실패율 증가"
+          description: "결제 실패율이 5%를 초과했습니다."
+
+      # 데이터베이스 크기 증가
+      - alert: LargeDatabaseSize
+        expr: parkflow_database_size_bytes > 1073741824  # 1GB
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "데이터베이스 크기 경고"
+          description: "데이터베이스 크기가 1GB를 초과했습니다. 정리가 필요할 수 있습니다."
+
+      # 활성 주차 세션 급증
+      - alert: UnusualSessionCount
+        expr: |
+          parkflow_sessions_total{status="PARKING"} > 1000
+        for: 5m
+        labels:
+          severity: info
+        annotations:
+          summary: "활성 주차 세션 다수"
+          description: "현재 주차 중인 차량이 1000대를 초과했습니다."

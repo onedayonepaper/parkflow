@@ -77,7 +77,7 @@ export async function userRoutes(app: FastifyInstance) {
         required: ['username', 'password', 'role'],
         properties: {
           username: { type: 'string', minLength: 3, maxLength: 50 },
-          password: { type: 'string', minLength: 4 },
+          password: { type: 'string', minLength: 8, description: '비밀번호 (최소 8자, 대문자/소문자/숫자/특수문자 중 2가지 이상 포함 권장)' },
           role: { type: 'string', enum: ['SUPER_ADMIN', 'OPERATOR', 'AUDITOR'] },
         },
       },
@@ -154,7 +154,7 @@ export async function userRoutes(app: FastifyInstance) {
         type: 'object',
         properties: {
           username: { type: 'string', minLength: 3, maxLength: 50 },
-          password: { type: 'string', minLength: 4 },
+          password: { type: 'string', minLength: 8, description: '비밀번호 (최소 8자, 대문자/소문자/숫자/특수문자 중 2가지 이상 포함 권장)' },
           role: { type: 'string', enum: ['SUPER_ADMIN', 'OPERATOR', 'AUDITOR'] },
           isActive: { type: 'boolean' },
         },
@@ -346,7 +346,7 @@ export async function userRoutes(app: FastifyInstance) {
         required: ['currentPassword', 'newPassword'],
         properties: {
           currentPassword: { type: 'string' },
-          newPassword: { type: 'string', minLength: 4 },
+          newPassword: { type: 'string', minLength: 8, description: '새 비밀번호 (최소 8자, 대문자/소문자/숫자/특수문자 중 2가지 이상 포함 권장)' },
         },
       },
     },

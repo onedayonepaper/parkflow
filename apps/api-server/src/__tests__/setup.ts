@@ -9,6 +9,10 @@ import { ratePlanRoutes } from '../routes/rate-plan.js';
 import { discountRoutes } from '../routes/discount.js';
 import { membershipRoutes } from '../routes/membership.js';
 import { statsRoutes } from '../routes/stats.js';
+import { userRoutes } from '../routes/user.js';
+import { auditRoutes } from '../routes/audit.js';
+import { backupRoutes } from '../routes/backup.js';
+import { metricsRoutes } from '../routes/metrics.js';
 
 const JWT_SECRET = 'test-secret-key-for-integration-testing';
 
@@ -38,16 +42,20 @@ export async function buildApp(): Promise<FastifyInstance> {
   app.register(discountRoutes, { prefix: '/api/discount-rules' });
   app.register(membershipRoutes, { prefix: '/api/memberships' });
   app.register(statsRoutes, { prefix: '/api/stats' });
+  app.register(userRoutes, { prefix: '/api/users' });
+  app.register(auditRoutes, { prefix: '/api/audit' });
+  app.register(backupRoutes, { prefix: '/api/backups' });
+  app.register(metricsRoutes, { prefix: '/metrics' });
 
   await app.ready();
   return app;
 }
 
-export function getTestToken(app: FastifyInstance): string {
+export function getTestToken(app: FastifyInstance, role: 'SUPER_ADMIN' | 'OPERATOR' | 'AUDITOR' = 'SUPER_ADMIN'): string {
   return app.jwt.sign({
     sub: 'user_test1',
     username: 'admin',
-    role: 'SUPER_ADMIN',
+    role,
     siteId: 'site_default',
   }, { expiresIn: '1h' });
 }

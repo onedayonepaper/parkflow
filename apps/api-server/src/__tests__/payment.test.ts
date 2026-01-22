@@ -42,6 +42,9 @@ describe('Payment Routes', () => {
       const response = await app.inject({
         method: 'POST',
         url: '/api/payments/mock/approve',
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
         payload: {
           sessionId: paymentTestSessionId,
           amount: 3000,
@@ -61,6 +64,9 @@ describe('Payment Routes', () => {
       const response = await app.inject({
         method: 'POST',
         url: '/api/payments/mock/approve',
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
         payload: {
           sessionId: paymentTestSessionId,
           amount: 3000,
@@ -76,6 +82,9 @@ describe('Payment Routes', () => {
       const response = await app.inject({
         method: 'POST',
         url: '/api/payments/mock/approve',
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
         payload: {
           sessionId: 'nonexistent_session',
           amount: 1000,
@@ -83,6 +92,19 @@ describe('Payment Routes', () => {
       });
 
       expect(response.statusCode).toBe(404);
+    });
+
+    it('should return 401 without authentication', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/payments/mock/approve',
+        payload: {
+          sessionId: 'any_session',
+          amount: 1000,
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
     });
   });
 

@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getDb } from '../db/index.js';
 import {
   LprEventRequestSchema,
@@ -16,6 +16,13 @@ import {
 import { calculateWithDiscounts } from '@parkflow/pricing-engine';
 import { broadcast } from '../ws/handler.js';
 import { getHardwareManager } from '../services/hardware.js';
+
+// Fastify 인스턴스 타입 확장
+declare module 'fastify' {
+  interface FastifyInstance {
+    authenticateDevice: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+  }
+}
 
 export async function deviceRoutes(app: FastifyInstance) {
   // POST /api/device/lpr/events - LPR 이벤트 수신
@@ -37,10 +44,11 @@ export async function deviceRoutes(app: FastifyInstance) {
       message?: string;
     }>;
   }>('/lpr/events', {
+    preHandler: app.authenticateDevice,
     schema: {
       tags: ['Device'],
       summary: 'LPR 이벤트 수신',
-      description: '차량 번호판 인식 이벤트를 수신합니다. 입차 시 세션 생성, 출차 시 요금 계산을 수행합니다.',
+      description: '차량 번호판 인식 이벤트를 수신합니다. 디바이스 API 키 인증 필요. 입차 시 세션 생성, 출차 시 요금 계산을 수행합니다.',
       body: {
         type: 'object',
         required: ['deviceId', 'laneId', 'direction', 'plateNo', 'capturedAt'],
@@ -386,10 +394,11 @@ export async function deviceRoutes(app: FastifyInstance) {
     Body: { deviceId: string; status: 'ONLINE' | 'OFFLINE' | 'UNKNOWN'; ts: string };
     Reply: ApiResponse<{ received: boolean }>;
   }>('/heartbeat', {
+    preHandler: app.authenticateDevice,
     schema: {
       tags: ['Device'],
       summary: '디바이스 Heartbeat',
-      description: '디바이스 상태를 업데이트합니다.',
+      description: '디바이스 상태를 업데이트합니다. 디바이스 API 키 인증 필요.',
     },
   }, async (request, reply) => {
     const parsed = HeartbeatRequestSchema.safeParse(request.body);
@@ -434,10 +443,11 @@ export async function deviceRoutes(app: FastifyInstance) {
     };
     Reply: ApiResponse<{ commandId: string; executed: boolean }>;
   }>('/barrier/command', {
+    preHandler: app.authenticateDevice,
     schema: {
       tags: ['Device'],
       summary: '차단기 명령',
-      description: '차단기를 열거나 닫는 명령을 전송합니다.',
+      description: '차단기를 열거나 닫는 명령을 전송합니다. 디바이스 API 키 인증 필요.',
     },
   }, async (request, reply) => {
     const parsed = BarrierCommandRequestSchema.safeParse(request.body);
@@ -489,10 +499,11 @@ export async function deviceRoutes(app: FastifyInstance) {
   app.get<{
     Params: { deviceId: string };
   }>('/barrier/:deviceId/state', {
+    preHandler: app.authenticateDevice,
     schema: {
       tags: ['Device'],
       summary: '차단기 상태 조회',
-      description: '특정 차단기의 현재 상태를 조회합니다.',
+      description: '특정 차단기의 현재 상태를 조회합니다. 디바이스 API 키 인증 필요.',
     },
   }, async (request, reply) => {
     const { deviceId } = request.params;
@@ -517,10 +528,11 @@ export async function deviceRoutes(app: FastifyInstance) {
 
   // GET /api/device/status - 모든 디바이스 상태 조회
   app.get('/status', {
+    preHandler: app.authenticateDevice,
     schema: {
       tags: ['Device'],
       summary: '디바이스 상태 조회',
-      description: '모든 하드웨어 디바이스의 연결 상태를 조회합니다.',
+      description: '모든 하드웨어 디바이스의 연결 상태를 조회합니다. 디바이스 API 키 인증 필요.',
     },
   }, async (request, reply) => {
     const hardwareManager = getHardwareManager();

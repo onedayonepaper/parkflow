@@ -15,13 +15,26 @@ services:
       - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost}
       - RATE_LIMIT_MAX=${RATE_LIMIT_MAX:-100}
       - RATE_LIMIT_WINDOW_MS=${RATE_LIMIT_WINDOW_MS:-60000}
+      # Security
+      - DEVICE_API_KEY=${DEVICE_API_KEY:-}
+      - KIOSK_API_KEY=${KIOSK_API_KEY:-}
+      - REQUEST_BODY_LIMIT=${REQUEST_BODY_LIMIT:-1048576}
+      - KIOSK_RATE_LIMIT=${KIOSK_RATE_LIMIT:-30}
+      # Backup
+      - BACKUP_ENABLED=${BACKUP_ENABLED:-true}
+      - BACKUP_DIR=/app/data/backups
+      - BACKUP_SCHEDULE=${BACKUP_SCHEDULE:-0 3 * * *}
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-30}
+      - BACKUP_MAX_FILES=${BACKUP_MAX_FILES:-100}
+      - BACKUP_COMPRESS=${BACKUP_COMPRESS:-true}
     volumes:
       - api-data:/app/apps/api-server/data
+      - api-backups:/app/data/backups
     ports:
       - "3000:3000"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -41,4 +54,6 @@ services:
 
 volumes:
   api-data:
+    driver: local
+  api-backups:
     driver: local

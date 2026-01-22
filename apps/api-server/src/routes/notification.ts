@@ -1,24 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import { getDb } from '../db/index.js';
 import { generateId, ID_PREFIX, nowIso, DEFAULT_SITE_ID } from '@parkflow/shared';
-
-// 알림 발송 서비스 인터페이스
-interface NotificationService {
-  sendEmail(to: string, subject: string, body: string): Promise<{ success: boolean; messageId?: string; error?: string }>;
-  sendSMS(to: string, body: string): Promise<{ success: boolean; messageId?: string; error?: string }>;
-}
-
-// Mock 알림 서비스 (실제 구현 시 외부 서비스 연동)
-const mockNotificationService: NotificationService = {
-  async sendEmail(to: string, subject: string, body: string) {
-    console.log(`[MOCK EMAIL] To: ${to}, Subject: ${subject}, Body: ${body.substring(0, 100)}...`);
-    return { success: true, messageId: `mock_email_${Date.now()}` };
-  },
-  async sendSMS(to: string, body: string) {
-    console.log(`[MOCK SMS] To: ${to}, Body: ${body}`);
-    return { success: true, messageId: `mock_sms_${Date.now()}` };
-  },
-};
+import {
+  getNotificationService,
+  renderTemplate,
+  isValidEmail,
+  isValidPhoneNumber,
+  type NotificationResult,
+} from '../services/notification.js';
 
 export async function notificationRoutes(app: FastifyInstance) {
   // GET /api/notifications/templates - 알림 템플릿 목록
@@ -218,10 +207,12 @@ export async function notificationRoutes(app: FastifyInstance) {
   // POST /api/notifications/send - 알림 발송
   app.post<{
     Body: {
-      type: 'EMAIL' | 'SMS';
+      type: 'EMAIL' | 'SMS' | 'KAKAO';
       recipient: string;
       subject?: string;
       body: string;
+      templateCode?: string;
+      variables?: Record<string, string>;
     };
   }>('/send', {
     preHandler: [app.authenticate],
@@ -234,21 +225,24 @@ export async function notificationRoutes(app: FastifyInstance) {
         type: 'object',
         required: ['type', 'recipient', 'body'],
         properties: {
-          type: { type: 'string', enum: ['EMAIL', 'SMS'] },
+          type: { type: 'string', enum: ['EMAIL', 'SMS', 'KAKAO'] },
           recipient: { type: 'string', description: '이메일 주소 또는 전화번호' },
           subject: { type: 'string', description: '이메일 제목' },
           body: { type: 'string', description: '메시지 내용' },
+          templateCode: { type: 'string', description: '카카오 알림톡 템플릿 코드' },
+          variables: { type: 'object', description: '템플릿 변수' },
         },
       },
     },
   }, async (request, reply) => {
-    const { type, recipient, subject, body } = request.body;
+    const { type, recipient, subject, body, templateCode, variables } = request.body;
     const db = getDb();
     const now = nowIso();
 
     const logId = generateId(ID_PREFIX.NOTIFICATION || 'noti');
+    const notificationService = getNotificationService();
 
-    let result: { success: boolean; messageId?: string; error?: string };
+    let result: NotificationResult;
 
     if (type === 'EMAIL') {
       if (!subject) {
@@ -258,9 +252,56 @@ export async function notificationRoutes(app: FastifyInstance) {
           error: { code: 'MISSING_SUBJECT', message: '이메일 제목이 필요합니다.' },
         });
       }
-      result = await mockNotificationService.sendEmail(recipient, subject, body);
+      if (!isValidEmail(recipient)) {
+        return reply.code(400).send({
+          ok: false,
+          data: null,
+          error: { code: 'INVALID_EMAIL', message: '유효하지 않은 이메일 주소입니다.' },
+        });
+      }
+      result = await notificationService.email.send({
+        to: recipient,
+        subject,
+        body,
+      });
+    } else if (type === 'SMS') {
+      if (!isValidPhoneNumber(recipient)) {
+        return reply.code(400).send({
+          ok: false,
+          data: null,
+          error: { code: 'INVALID_PHONE', message: '유효하지 않은 전화번호입니다.' },
+        });
+      }
+      result = await notificationService.sms.send({
+        to: recipient,
+        body,
+      });
+    } else if (type === 'KAKAO') {
+      if (!templateCode) {
+        return reply.code(400).send({
+          ok: false,
+          data: null,
+          error: { code: 'MISSING_TEMPLATE', message: '카카오 알림톡은 템플릿 코드가 필요합니다.' },
+        });
+      }
+      if (!isValidPhoneNumber(recipient)) {
+        return reply.code(400).send({
+          ok: false,
+          data: null,
+          error: { code: 'INVALID_PHONE', message: '유효하지 않은 전화번호입니다.' },
+        });
+      }
+      result = await notificationService.kakao.send({
+        to: recipient,
+        templateCode,
+        variables: variables || {},
+      });
     } else {
-      result = await mockNotificationService.sendSMS(recipient, body);
+      return reply.code(400).send({
+        ok: false,
+        data: null,
+        error: { code: 'INVALID_TYPE', message: '지원하지 않는 알림 타입입니다.' },
+      });
     }
 
     // 발송 로그 저장
@@ -275,7 +316,7 @@ export async function notificationRoutes(app: FastifyInstance) {
       subject || null,
       body,
       result.success ? 'SENT' : 'FAILED',
-      result.error || null,
+      result.error?.message || null,
       result.success ? now : null,
       now
     );
@@ -284,7 +325,10 @@ export async function notificationRoutes(app: FastifyInstance) {
       return reply.code(500).send({
         ok: false,
         data: null,
-        error: { code: 'SEND_FAILED', message: result.error || '발송에 실패했습니다.' },
+        error: {
+          code: result.error?.code || 'SEND_FAILED',
+          message: result.error?.message || '발송에 실패했습니다.',
+        },
       });
     }
 
@@ -293,6 +337,7 @@ export async function notificationRoutes(app: FastifyInstance) {
       data: {
         logId,
         messageId: result.messageId,
+        provider: result.provider,
         message: '알림이 발송되었습니다.',
       },
       error: null,
@@ -373,7 +418,7 @@ export async function notificationRoutes(app: FastifyInstance) {
   // POST /api/notifications/test - 테스트 알림 발송
   app.post<{
     Body: {
-      type: 'EMAIL' | 'SMS';
+      type: 'EMAIL' | 'SMS' | 'KAKAO';
       recipient: string;
     };
   }>('/test', {
@@ -387,33 +432,131 @@ export async function notificationRoutes(app: FastifyInstance) {
         type: 'object',
         required: ['type', 'recipient'],
         properties: {
-          type: { type: 'string', enum: ['EMAIL', 'SMS'] },
+          type: { type: 'string', enum: ['EMAIL', 'SMS', 'KAKAO'] },
           recipient: { type: 'string' },
         },
       },
     },
   }, async (request, reply) => {
     const { type, recipient } = request.body;
+    const notificationService = getNotificationService();
 
-    let result: { success: boolean; messageId?: string; error?: string };
+    let result: NotificationResult;
 
     if (type === 'EMAIL') {
-      result = await mockNotificationService.sendEmail(
-        recipient,
-        '[ParkFlow] 테스트 알림',
-        '이 메시지는 ParkFlow 알림 테스트입니다. 정상적으로 수신되었다면 알림 설정이 완료되었습니다.'
-      );
+      if (!isValidEmail(recipient)) {
+        return reply.code(400).send({
+          ok: false,
+          data: null,
+          error: { code: 'INVALID_EMAIL', message: '유효하지 않은 이메일 주소입니다.' },
+        });
+      }
+      result = await notificationService.email.send({
+        to: recipient,
+        subject: '[ParkFlow] 테스트 알림',
+        body: '이 메시지는 ParkFlow 알림 테스트입니다. 정상적으로 수신되었다면 알림 설정이 완료되었습니다.',
+        html: `
+          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333;">ParkFlow 테스트 알림</h2>
+            <p>이 메시지는 ParkFlow 알림 테스트입니다.</p>
+            <p>정상적으로 수신되었다면 알림 설정이 완료되었습니다.</p>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+            <p style="color: #666; font-size: 12px;">ParkFlow 주차 관리 시스템</p>
+          </div>
+        `,
+      });
+    } else if (type === 'SMS') {
+      if (!isValidPhoneNumber(recipient)) {
+        return reply.code(400).send({
+          ok: false,
+          data: null,
+          error: { code: 'INVALID_PHONE', message: '유효하지 않은 전화번호입니다.' },
+        });
+      }
+      result = await notificationService.sms.send({
+        to: recipient,
+        body: '[ParkFlow] 테스트 알림입니다. 알림 설정이 완료되었습니다.',
+      });
+    } else if (type === 'KAKAO') {
+      if (!isValidPhoneNumber(recipient)) {
+        return reply.code(400).send({
+          ok: false,
+          data: null,
+          error: { code: 'INVALID_PHONE', message: '유효하지 않은 전화번호입니다.' },
+        });
+      }
+      // 카카오 알림톡 테스트 (테스트용 기본 템플릿 사용)
+      result = await notificationService.kakao.send({
+        to: recipient,
+        templateCode: 'PARKFLOW_TEST',
+        variables: {
+          siteName: 'ParkFlow',
+          message: '테스트 알림입니다.',
+        },
+      });
     } else {
-      result = await mockNotificationService.sendSMS(
-        recipient,
-        '[ParkFlow] 테스트 알림입니다. 알림 설정이 완료되었습니다.'
-      );
+      return reply.code(400).send({
+        ok: false,
+        data: null,
+        error: { code: 'INVALID_TYPE', message: '지원하지 않는 알림 타입입니다.' },
+      });
     }
 
     return reply.send({
       ok: result.success,
-      data: result.success ? { message: '테스트 알림이 발송되었습니다.' } : null,
-      error: result.success ? null : { code: 'SEND_FAILED', message: result.error || '발송 실패' },
+      data: result.success
+        ? {
+            message: '테스트 알림이 발송되었습니다.',
+            provider: result.provider,
+            messageId: result.messageId,
+          }
+        : null,
+      error: result.success
+        ? null
+        : {
+            code: result.error?.code || 'SEND_FAILED',
+            message: result.error?.message || '발송 실패',
+          },
+    });
+  });
+
+  // GET /api/notifications/status - 알림 서비스 상태 확인
+  app.get('/status', {
+    preHandler: [app.authenticate],
+    schema: {
+      tags: ['Notification'],
+      summary: '알림 서비스 상태 확인',
+      description: '각 알림 채널의 설정 상태를 확인합니다.',
+      security: [{ bearerAuth: [] }],
+    },
+  }, async (request, reply) => {
+    const notificationService = getNotificationService();
+
+    const [emailOk, smsOk, kakaoOk] = await Promise.all([
+      notificationService.email.verify(),
+      notificationService.sms.verify(),
+      notificationService.kakao.verify(),
+    ]);
+
+    return reply.send({
+      ok: true,
+      data: {
+        mode: process.env.NOTIFICATION_MODE || 'mock',
+        channels: {
+          email: {
+            configured: emailOk,
+            provider: process.env.EMAIL_PROVIDER || 'smtp',
+          },
+          sms: {
+            configured: smsOk,
+            provider: process.env.SMS_PROVIDER || 'nhn',
+          },
+          kakao: {
+            configured: kakaoOk,
+          },
+        },
+      },
+      error: null,
     });
   });
 }

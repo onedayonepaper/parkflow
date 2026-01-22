@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { getDb } from '../db/index.js';
 import {
   generateId,
@@ -7,16 +7,38 @@ import {
   DEFAULT_SITE_ID,
 } from '@parkflow/shared';
 
+// Fastify 인스턴스 타입 확장
+declare module 'fastify' {
+  interface FastifyInstance {
+    authenticateKiosk: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+  }
+}
+
 /**
- * 키오스크용 API (인증 없이 접근 가능)
+ * 키오스크용 API
+ * - API 키 인증 필요 (x-kiosk-api-key 또는 x-api-key 헤더)
+ * - Rate Limiting 적용
  * - 차량번호로 세션 조회
  * - 결제 처리
  */
 export async function kioskRoutes(app: FastifyInstance) {
+  // 키오스크 전용 Rate Limiting 설정
+  const kioskRateLimit = {
+    max: parseInt(process.env.KIOSK_RATE_LIMIT || '30', 10),
+    timeWindow: 60000, // 1분
+    errorResponseBuilder: () => ({
+      ok: false,
+      data: null,
+      error: { code: 'RATE_LIMIT_EXCEEDED', message: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' },
+    }),
+  };
+
   // GET /api/kiosk/lookup?plateNo=12가3456
   app.get<{
     Querystring: { plateNo: string };
   }>('/lookup', {
+    preHandler: app.authenticateKiosk,
+    config: { rateLimit: kioskRateLimit },
     schema: {
       tags: ['Kiosk'],
       summary: '차량번호로 세션 조회',
@@ -115,10 +137,12 @@ export async function kioskRoutes(app: FastifyInstance) {
   app.post<{
     Body: { sessionId: string; amount: number };
   }>('/pay', {
+    preHandler: app.authenticateKiosk,
+    config: { rateLimit: kioskRateLimit },
     schema: {
       tags: ['Kiosk'],
       summary: '키오스크 결제 처리',
-      description: '키오스크에서 주차 요금을 결제합니다. Mock 결제로 처리됩니다.',
+      description: '키오스크에서 주차 요금을 결제합니다. API 키 인증 필요.',
       body: {
         type: 'object',
         required: ['sessionId', 'amount'],

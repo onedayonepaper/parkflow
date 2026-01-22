@@ -9,7 +9,7 @@ import {
   type ApiResponse,
 } from '@parkflow/shared';
 import { broadcast } from '../ws/handler.js';
-import { getTossPaymentsService } from '../services/tosspayments.js';
+import { getPaymentService } from '../services/tosspayments.js';
 
 export async function paymentRoutes(app: FastifyInstance) {
   // GET /api/payments - 결제 목록 조회
@@ -171,15 +171,17 @@ export async function paymentRoutes(app: FastifyInstance) {
     });
   });
 
-  // POST /api/payments/mock/approve - Mock 결제 승인
+  // POST /api/payments/mock/approve - Mock 결제 승인 (개발/테스트 환경 전용)
   app.post<{
     Body: { sessionId: string; amount: number; method?: string };
     Reply: ApiResponse<{ paymentId: string; status: string; approvedAt: string }>;
   }>('/mock/approve', {
+    preHandler: [app.authenticate],
     schema: {
       tags: ['Payment'],
-      summary: 'Mock 결제 승인',
-      description: '테스트용 Mock 결제를 승인합니다. 세션 상태가 PAID로 변경됩니다.',
+      summary: 'Mock 결제 승인 (개발/테스트 전용)',
+      description: '테스트용 Mock 결제를 승인합니다. 세션 상태가 PAID로 변경됩니다. 프로덕션 환경에서는 사용할 수 없습니다.',
+      security: [{ bearerAuth: [] }],
       body: {
         type: 'object',
         required: ['sessionId', 'amount'],
@@ -208,6 +210,15 @@ export async function paymentRoutes(app: FastifyInstance) {
       },
     },
   }, async (request, reply) => {
+    // 프로덕션 환경에서는 Mock 결제 차단
+    if (process.env.NODE_ENV === 'production') {
+      return reply.code(403).send({
+        ok: false,
+        data: null,
+        error: { code: 'FORBIDDEN', message: 'Mock payments are not allowed in production' },
+      });
+    }
+
     const parsed = MockPaymentRequestSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -313,10 +324,10 @@ export async function paymentRoutes(app: FastifyInstance) {
       description: '프론트엔드 SDK 연동을 위한 클라이언트 키를 반환합니다.',
     },
   }, async (request, reply) => {
-    const toss = getTossPaymentsService();
+    const paymentService = getPaymentService();
     return reply.send({
       ok: true,
-      data: { clientKey: toss.getClientKey() },
+      data: { clientKey: paymentService.getClientKey() },
       error: null,
     });
   });
@@ -380,9 +391,9 @@ export async function paymentRoutes(app: FastifyInstance) {
       });
     }
 
-    // 토스페이먼츠 결제 승인 호출
-    const toss = getTossPaymentsService();
-    const result = await toss.confirmPayment({ paymentKey, orderId, amount });
+    // 결제 승인 호출
+    const paymentService = getPaymentService();
+    const result = await paymentService.confirmPayment({ paymentKey, orderId, amount });
 
     if (!result.success) {
       return reply.code(400).send({
@@ -514,9 +525,12 @@ export async function paymentRoutes(app: FastifyInstance) {
       });
     }
 
-    // 토스페이먼츠 결제 취소 호출
-    const toss = getTossPaymentsService();
-    const result = await toss.cancelPayment({ paymentKey, cancelReason, cancelAmount });
+    // 결제 취소 호출 (원래 금액 검증 포함)
+    const paymentService = getPaymentService();
+    const result = await paymentService.cancelPayment(
+      { paymentKey, cancelReason, cancelAmount },
+      payment.amount  // 원래 결제 금액 전달
+    );
 
     if (!result.success) {
       return reply.code(400).send({
@@ -614,11 +628,35 @@ export async function paymentRoutes(app: FastifyInstance) {
     console.log(`[TossPayments Webhook] Event: ${eventType}, Created: ${createdAt}`);
     console.log(`[TossPayments Webhook] Data:`, JSON.stringify(data, null, 2));
 
-    // 웹훅 시크릿 검증 (실제 구현 시 필요)
-    // const toss = getTossPaymentsService();
-    // if (data.secret && !toss.verifyWebhookSecret(data.secret)) {
-    //   return reply.code(401).send({ ok: false, data: null, error: { code: 'INVALID_SECRET', message: 'Invalid webhook secret' } });
-    // }
+    // 웹훅 서명 검증
+    const paymentService = getPaymentService();
+    const signature = request.headers['toss-signature'] as string | undefined;
+
+    if (signature) {
+      const payload = JSON.stringify(request.body);
+      const isValidSignature = paymentService.verifyWebhookSignature(payload, signature);
+
+      if (!isValidSignature) {
+        console.error('[TossPayments Webhook] Invalid signature');
+        return reply.code(401).send({
+          ok: false,
+          data: null,
+          error: { code: 'INVALID_SIGNATURE', message: 'Invalid webhook signature' },
+        });
+      }
+    } else {
+      // 시그니처 헤더가 없는 경우 (개발 환경에서만 허용)
+      const nodeEnv = process.env.NODE_ENV || 'development';
+      if (nodeEnv === 'production') {
+        console.error('[TossPayments Webhook] Missing signature header in production');
+        return reply.code(401).send({
+          ok: false,
+          data: null,
+          error: { code: 'MISSING_SIGNATURE', message: 'Webhook signature header is required' },
+        });
+      }
+      console.warn('[TossPayments Webhook] No signature header provided (allowed in development)');
+    }
 
     switch (eventType) {
       case 'PAYMENT_STATUS_CHANGED': {
