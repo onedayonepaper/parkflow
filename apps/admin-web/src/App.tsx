@@ -25,6 +25,7 @@ import SimulationPage from './pages/SimulationPage';
 import SitesPage from './pages/SitesPage';
 import NotificationsPage from './pages/NotificationsPage';
 import DevicesPage from './pages/DevicesPage';
+import OperationsPage from './pages/OperationsPage';
 import Layout from './components/Layout';
 import { PWAUpdatePrompt, PWAInstallPrompt, OfflineIndicator } from './components/PWAPrompt';
 
@@ -70,6 +71,7 @@ export default function App() {
                 <Route path="/sites" element={<SitesPage />} />
                 <Route path="/notifications" element={<NotificationsPage />} />
                 <Route path="/devices" element={<DevicesPage />} />
+                <Route path="/operations" element={<OperationsPage />} />
                 <Route path="/guide" element={<UsageGuidePage />} />
                 <Route path="/installation" element={<InstallationGuidePage />} />
                 <Route path="/hardware" element={<HardwareGuidePage />} />

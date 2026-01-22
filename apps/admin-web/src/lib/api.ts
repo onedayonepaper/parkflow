@@ -402,4 +402,128 @@ export const api = {
 
   checkWhitelist: (plateNo: string) =>
     request<{ isWhitelisted: boolean; entry?: any }>(`/whitelist/check/${plateNo}`),
+
+  // Operations - Barrier Control
+  getBarriers: () =>
+    request<{
+      barriers: {
+        deviceId: string;
+        name: string;
+        laneId: string;
+        laneName: string;
+        direction: 'ENTRY' | 'EXIT';
+        state: 'OPEN' | 'CLOSED' | 'OPENING' | 'CLOSING' | 'ERROR' | 'UNKNOWN';
+        connected: boolean;
+      }[];
+    }>('/operations/barriers'),
+
+  getBarrierState: (deviceId: string) =>
+    request<{
+      deviceId: string;
+      name: string;
+      laneId: string;
+      laneName: string;
+      direction: 'ENTRY' | 'EXIT';
+      state: 'OPEN' | 'CLOSED' | 'OPENING' | 'CLOSING' | 'ERROR' | 'UNKNOWN';
+      connected: boolean;
+    }>(`/operations/barriers/${deviceId}/state`),
+
+  openBarrier: (deviceId: string, reason?: string) =>
+    request<{
+      deviceId: string;
+      success: boolean;
+      previousState: string | null;
+      newState: string | null;
+      error?: string;
+    }>(`/operations/barriers/${deviceId}/open`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+
+  closeBarrier: (deviceId: string, reason?: string) =>
+    request<{
+      deviceId: string;
+      success: boolean;
+      previousState: string | null;
+      newState: string | null;
+      error?: string;
+    }>(`/operations/barriers/${deviceId}/close`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+
+  getRecentBarrierCommands: (limit?: number) =>
+    request<{
+      commands: {
+        id: string;
+        deviceId: string;
+        deviceName: string;
+        laneId: string;
+        laneName: string;
+        direction: string;
+        action: 'OPEN' | 'CLOSE';
+        reason: string;
+        status: string;
+        createdAt: string;
+        executedAt: string | null;
+      }[];
+    }>(`/operations/barriers/commands/recent${limit ? `?limit=${limit}` : ''}`),
+
+  emergencyOpenAllBarriers: (reason: string) =>
+    request<{
+      total: number;
+      success: number;
+      failed: number;
+      results: { deviceId: string; name: string; success: boolean; error?: string }[];
+    }>('/operations/barriers/emergency-open', {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+
+  manualEntry: (data: { plateNo: string; laneId?: string; note?: string }) =>
+    request<{
+      sessionId: string;
+      plateNo: string;
+      entryAt: string;
+    }>('/operations/manual-entry', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  manualExit: (data: {
+    sessionId?: string;
+    plateNo?: string;
+    overridePayment: boolean;
+    reason: string;
+    note?: string;
+  }) =>
+    request<{
+      sessionId: string;
+      plateNo: string;
+      exitAt: string;
+      overridePayment: boolean;
+      barrierOpened: boolean;
+      finalFee: number;
+    }>('/operations/manual-exit', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  getActiveSessions: (params?: { status?: string; limit?: number }) => {
+    const query = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : '';
+    return request<{
+      sessions: {
+        id: string;
+        plateNo: string;
+        status: string;
+        entryAt: string;
+        exitAt: string | null;
+        rawFee: number;
+        discountTotal: number;
+        finalFee: number;
+        paymentStatus: string;
+      }[];
+      total: number;
+    }>(`/operations/active-sessions${query}`);
+  },
 };

@@ -36,6 +36,7 @@ import { initializeBackup, shutdownBackup } from './services/backup.js';
 import { backupRoutes } from './routes/backup.js';
 import { metricsRoutes } from './routes/metrics.js';
 import { webhookRoutes } from './routes/webhook.js';
+import { operationsRoutes } from './routes/operations.js';
 import { recordHttpMetric } from './services/metrics.js';
 
 // Validate environment variables
@@ -476,6 +477,7 @@ ParkFlow는 LPR(번호판 인식) 기반 주차장 관리 시스템입니다.
   app.register(backupRoutes, { prefix: '/api/backups' });
   app.register(metricsRoutes, { prefix: '/metrics' });
   app.register(webhookRoutes, { prefix: '/api/webhooks' });
+  app.register(operationsRoutes, { prefix: '/api/operations' });
 
   // WebSocket (with JWT authentication)
   const wsHandler = createWsHandler(app);

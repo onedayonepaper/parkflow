@@ -6,6 +6,7 @@ import { useTheme } from '../contexts/ThemeContext';
 
 const navItems = [
   { path: '/', label: '대시보드', icon: '📊' },
+  { path: '/operations', label: '운영 관리', icon: '🚧' },
   { path: '/sessions', label: '주차 세션', icon: '🚗' },
   { path: '/payments', label: '결제 내역', icon: '💳' },
   { path: '/rate-plans', label: '요금 정책', icon: '💰' },
