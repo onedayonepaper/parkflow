@@ -417,7 +417,7 @@ export default function NotificationsPage() {
 
       {/* 템플릿 모달 */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" role="dialog" aria-modal="true">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg p-6">
             <h3 className="text-lg font-semibold mb-4 dark:text-white">
               {editingTemplate ? '템플릿 수정' : '템플릿 추가'}

@@ -325,7 +325,7 @@ function Receipt({ data, onClose }: { data: ReceiptData; onClose: () => void }) 
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
         {/* Receipt Preview */}
         <div ref={receiptRef} className="p-6 bg-white">
