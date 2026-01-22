@@ -40,7 +40,8 @@ test.describe('Rate Plans Management', () => {
   test('should open create rate plan modal', async ({ page }) => {
     await page.waitForTimeout(1000);
 
-    const addButton = page.getByRole('button', { name: /요금제 추가|추가|새 요금/i });
+    // Use more specific selector for the add button outside dialogs
+    const addButton = page.locator('button:has-text("요금제 추가"), button:has-text("+ 요금제"), button:has-text("새 요금")').first();
 
     if (await addButton.isVisible({ timeout: 3000 }).catch(() => false)) {
       await addButton.click();
@@ -53,7 +54,8 @@ test.describe('Rate Plans Management', () => {
   test('should create a new rate plan', async ({ page }) => {
     await page.waitForTimeout(1000);
 
-    const addButton = page.getByRole('button', { name: /요금제 추가|추가|새 요금/i });
+    // Use more specific selector for the add button outside dialogs
+    const addButton = page.locator('button:has-text("요금제 추가"), button:has-text("+ 요금제"), button:has-text("새 요금")').first();
 
     if (await addButton.isVisible({ timeout: 3000 }).catch(() => false)) {
       await addButton.click();
@@ -71,8 +73,8 @@ test.describe('Rate Plans Management', () => {
         await baseRateInput.fill('1000');
       }
 
-      // Submit form
-      const saveButton = page.getByRole('button', { name: /저장|생성|추가/i });
+      // Submit form - use the button inside the dialog
+      const saveButton = page.getByRole('dialog').getByRole('button', { name: /저장|생성|추가/i });
       if (await saveButton.isVisible()) {
         await saveButton.click();
         await page.waitForTimeout(1000);
@@ -96,7 +98,8 @@ test.describe('Rate Plans Management', () => {
         await nameInput.clear();
         await nameInput.fill('수정된 요금제');
 
-        const saveButton = page.getByRole('button', { name: /저장|수정/i });
+        // Use the button inside the dialog
+        const saveButton = page.getByRole('dialog').getByRole('button', { name: /저장|수정/i });
         if (await saveButton.isVisible()) {
           await saveButton.click();
         }

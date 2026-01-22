@@ -27,7 +27,8 @@ test.describe('Blacklist Management', () => {
   });
 
   test('should open add blacklist modal', async ({ page }) => {
-    const addButton = page.getByRole('button', { name: /추가|등록|블랙리스트 추가/i });
+    // Use more specific selector - the add button contains "+" or is outside the dialog
+    const addButton = page.locator('button:has-text("블랙리스트 등록"), button:has-text("+ 블랙리스트")').first();
 
     if (await addButton.isVisible()) {
       await addButton.click();
@@ -38,7 +39,8 @@ test.describe('Blacklist Management', () => {
   });
 
   test('should add vehicle to blacklist', async ({ page }) => {
-    const addButton = page.getByRole('button', { name: /추가|등록|블랙리스트 추가/i });
+    // Use more specific selector for the add button (outside dialog)
+    const addButton = page.locator('button:has-text("블랙리스트 등록"), button:has-text("+ 블랙리스트")').first();
 
     if (await addButton.isVisible()) {
       await addButton.click();
@@ -63,8 +65,8 @@ test.describe('Blacklist Management', () => {
         await expiryInput.fill(futureDate.toISOString().split('T')[0]);
       }
 
-      // Submit
-      const saveButton = page.getByRole('button', { name: /저장|등록|추가/i });
+      // Submit - use the button inside the dialog with type="submit"
+      const saveButton = page.getByRole('dialog').getByRole('button', { name: /저장|등록/i });
       await saveButton.click();
       await page.waitForTimeout(1000);
     }
@@ -93,7 +95,8 @@ test.describe('Blacklist Management', () => {
         await reasonInput.clear();
         await reasonInput.fill('수정된 블랙리스트 사유');
 
-        const saveButton = page.getByRole('button', { name: /저장|수정/i });
+        // Use the button inside the dialog
+        const saveButton = page.getByRole('dialog').getByRole('button', { name: /저장|수정/i });
         await saveButton.click();
       }
     }

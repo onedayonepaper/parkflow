@@ -18,8 +18,8 @@ test.describe('Discount Rules CRUD', () => {
   });
 
   test('should open create discount rule modal', async ({ page }) => {
-    // Click add button
-    const addButton = page.getByRole('button', { name: /추가|생성|새 할인/i });
+    // Use more specific selector for the add button outside dialogs
+    const addButton = page.locator('button:has-text("할인 규칙 추가"), button:has-text("+ 할인"), button:has-text("새 할인")').first();
 
     if (await addButton.isVisible()) {
       await addButton.click();
@@ -33,7 +33,8 @@ test.describe('Discount Rules CRUD', () => {
   });
 
   test('should create a new discount rule', async ({ page }) => {
-    const addButton = page.getByRole('button', { name: /추가|생성|새 할인/i });
+    // Use more specific selector for the add button outside dialogs
+    const addButton = page.locator('button:has-text("할인 규칙 추가"), button:has-text("+ 할인"), button:has-text("새 할인")').first();
 
     if (await addButton.isVisible()) {
       await addButton.click();
@@ -56,8 +57,8 @@ test.describe('Discount Rules CRUD', () => {
         await typeSelect.selectOption({ label: /정액|AMOUNT/i }).catch(() => {});
       }
 
-      // Submit form
-      const submitButton = page.getByRole('button', { name: /저장|생성|확인/i });
+      // Submit form - use the button inside the dialog
+      const submitButton = page.getByRole('dialog').getByRole('button', { name: /저장|생성|확인/i });
       if (await submitButton.isVisible()) {
         await submitButton.click();
 
@@ -79,7 +80,8 @@ test.describe('Discount Rules CRUD', () => {
       if (await nameInput.isVisible()) {
         await nameInput.fill('수정된 할인 규칙');
 
-        const submitButton = page.getByRole('button', { name: /저장|수정|확인/i });
+        // Use the button inside the dialog
+        const submitButton = page.getByRole('dialog').getByRole('button', { name: /저장|수정|확인/i });
         if (await submitButton.isVisible()) {
           await submitButton.click();
         }

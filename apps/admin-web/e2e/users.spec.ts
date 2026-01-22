@@ -27,7 +27,8 @@ test.describe('Users Management', () => {
   });
 
   test('should open add user modal', async ({ page }) => {
-    const addButton = page.getByRole('button', { name: /사용자 추가|추가/i });
+    // Use more specific selector for the add button outside dialogs
+    const addButton = page.locator('button:has-text("사용자 추가"), button:has-text("+ 사용자")').first();
 
     if (await addButton.isVisible()) {
       await addButton.click();
@@ -38,7 +39,8 @@ test.describe('Users Management', () => {
   });
 
   test('should create a new user', async ({ page }) => {
-    const addButton = page.getByRole('button', { name: /사용자 추가|추가/i });
+    // Use more specific selector for the add button outside dialogs
+    const addButton = page.locator('button:has-text("사용자 추가"), button:has-text("+ 사용자")').first();
 
     if (await addButton.isVisible()) {
       await addButton.click();
@@ -61,8 +63,8 @@ test.describe('Users Management', () => {
         await roleSelect.selectOption({ index: 1 });
       }
 
-      // Submit
-      const saveButton = page.getByRole('button', { name: /저장|추가|생성/i });
+      // Submit - use the button inside the dialog
+      const saveButton = page.getByRole('dialog').getByRole('button', { name: /저장|추가|생성/i });
       await saveButton.click();
       await page.waitForTimeout(1000);
     }
@@ -80,7 +82,8 @@ test.describe('Users Management', () => {
       if (await roleSelect.isVisible()) {
         await roleSelect.selectOption({ index: 0 });
 
-        const saveButton = page.getByRole('button', { name: /저장|수정/i });
+        // Use the button inside the dialog
+        const saveButton = page.getByRole('dialog').getByRole('button', { name: /저장|수정/i });
         await saveButton.click();
       }
     }

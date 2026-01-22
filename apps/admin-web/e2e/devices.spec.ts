@@ -44,7 +44,8 @@ test.describe('Devices Management', () => {
   });
 
   test('should open add device modal', async ({ page }) => {
-    const addButton = page.getByRole('button', { name: /장비 추가|추가/i });
+    // Use more specific selector for the add button outside dialogs
+    const addButton = page.locator('button:has-text("장비 추가"), button:has-text("+ 장비")').first();
 
     if (await addButton.isVisible()) {
       await addButton.click();
@@ -56,7 +57,8 @@ test.describe('Devices Management', () => {
   });
 
   test('should create a new device', async ({ page }) => {
-    const addButton = page.getByRole('button', { name: /장비 추가|추가/i });
+    // Use more specific selector for the add button outside dialogs
+    const addButton = page.locator('button:has-text("장비 추가"), button:has-text("+ 장비")').first();
 
     if (await addButton.isVisible()) {
       await addButton.click();
@@ -71,8 +73,8 @@ test.describe('Devices Management', () => {
         await typeSelect.selectOption({ index: 0 });
       }
 
-      // Submit
-      const saveButton = page.getByRole('button', { name: /저장|추가|확인/i });
+      // Submit - use the button inside the dialog
+      const saveButton = page.getByRole('dialog').getByRole('button', { name: /저장|추가|확인/i });
       await saveButton.click();
 
       // Wait for modal to close or success message
@@ -96,7 +98,8 @@ test.describe('Devices Management', () => {
         await nameInput.clear();
         await nameInput.fill('수정된 장비 이름');
 
-        const saveButton = page.getByRole('button', { name: /저장|수정|확인/i });
+        // Use the button inside the dialog
+        const saveButton = page.getByRole('dialog').getByRole('button', { name: /저장|수정|확인/i });
         await saveButton.click();
       }
     }
@@ -149,7 +152,8 @@ test.describe('Lanes Management', () => {
   });
 
   test('should open add lane modal', async ({ page }) => {
-    const addButton = page.getByRole('button', { name: /차로 추가|추가/i });
+    // Use more specific selector for the add button outside dialogs
+    const addButton = page.locator('button:has-text("차로 추가"), button:has-text("+ 차로")').first();
 
     if (await addButton.isVisible()) {
       await addButton.click();
@@ -160,7 +164,8 @@ test.describe('Lanes Management', () => {
   });
 
   test('should create a new lane', async ({ page }) => {
-    const addButton = page.getByRole('button', { name: /차로 추가|추가/i });
+    // Use more specific selector for the add button outside dialogs
+    const addButton = page.locator('button:has-text("차로 추가"), button:has-text("+ 차로")').first();
 
     if (await addButton.isVisible()) {
       await addButton.click();
@@ -178,8 +183,8 @@ test.describe('Lanes Management', () => {
         await directionSelect.selectOption({ index: 0 });
       }
 
-      // Submit
-      const saveButton = page.getByRole('button', { name: /저장|추가|확인/i });
+      // Submit - use the button inside the dialog
+      const saveButton = page.getByRole('dialog').getByRole('button', { name: /저장|추가|확인/i });
       await saveButton.click();
 
       await page.waitForTimeout(1000);
